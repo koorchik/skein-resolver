@@ -1,0 +1,261 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 710 canonicals"
+Entities:
+E1. Microsoft Office 2019
+E2. CVE-2018-0958
+E3. CVE-2019-17666
+E4. CVE-2018-20253
+E5. CVE-2017-17688
+E6. CVE-2017-0199
+E7. CVE-2018-20251
+E8. CVE-2017-17689
+E9. CVE-2018-20250
+E10. mstsc.exe
+E11. Software Restriction Policies (SRP) [aka SRP]
+E12. desktop.ini
+E13. RDP Wrapper [aka RDPWRAPPER]
+E14. HTTP Protocol Stack (http.sys)
+E15. rdp.exe
+E16. BORE
+E17. Remote Utilities - Host [aka REMOTE UTILITIES, RemoteUtilities]
+E18. AnyDesk
+E19. Microsoft Windows 7 for x64-based Systems SP1
+E20. Microsoft Windows Server 2008 for 32-bit Systems SP2
+E21. Windows 7
+E22. Microsoft Windows Server 2008 for x64-based Systems SP2
+E23. Microsoft Windows Server 2008 R2 for x64-based Systems SP1
+E24. Microsoft Windows Server 2008 R2 for Itanium-based Systems SP1
+E25. Windows [aka Microsoft Windows]
+E26. regsvr32.exe
+E27. Microsoft Windows Server 2008 for Itanium-based Systems SP2
+E28. Microsoft Windows 7 for 32-bit Systems SP1
+E29. Windows_Security_Update_xBQ
+E30. Microsoft Exchange Server 2013
+E31. Windows Server 2008
+E32. MS Exchange [aka Microsoft Exchange Server]
+E33. Microsoft Exchange Server 2010
+E34. Windows Server 2019
+E35. Microsoft Exchange Server 2016
+E36. Microsoft Exchange Server 2019
+E37. Microsoft Windows Server 2003
+E38. Windows SMBv1
+E39. Internet Explorer
+E40. Microsoft Access
+E41. Microsoft Defender [aka Windows Defender]
+E42. WINWORD.EXE
+E43. Microsoft Edge
+E44. CVE-2019-0708
+E45. CVE-2018-7600
+E46. CVE-2018-7602
+E47. CVE-2022-30190
+E48. CVE-2021-31207
+E49. CVE-2022-23131
+E50. CredoMap
+E51. CVE-2022-23134
+E52. CVE-2021-26857
+E53. CVE-2022-24521
+E54. УКАЗ ПРЕЗИДЕНТА УКРАЇНИ №151_2022.mp4.lnk
+E55. CVE-2018-20252
+E56. CVE-2018-0854
+E57. CVE-2018-13379
+E58. CVE-2018-8134
+E59. CVE-2018-8120
+E60. CVE-2022-21907
+E61. CVE-2020-35730
+E62. CVE-2021-26855
+E63. CVE-2021-26858
+E64. CVE-2021-44026
+E65. http-vuln-cve2021-26855.nse
+E66. CVE-2021-32648
+E67. CVE-2021-34523
+E68. CVE-2021-34473
+E69. CVE-2018-8124
+E70. CVE-2017-0144
+E71. CVE-2018-8132
+E72. CVE-2018-8136
+E73. CVE-2018-8141
+E74. CVE-2018-8174
+E75. CVE-2020-12641
+E76. CVE-2024-38213
+E77. CVE-2017-11882
+E78. SMBEXEC
+E79. ROTTENPOTATONG
+E80. SmartFTP
+E81. CMS Drupal
+E82. Mikrotik
+E83. WinSCP
+E84. Sonoko
+E85. Thunderbird [aka Mozilla Thunderbird]
+E86. HATVIBE
+E87. FireEye red team tools
+E88. Viber
+E89. POWERGAP
+E90. wmiexec
+E91. USB.dll [aka Usb]
+E92. AgentTesla [aka Agent Tesla]
+E93. LOADNEST
+E94. Remote Desktop Protocol (RDP)
+E95. Troldesh
+E96. ANONVNC
+E97. Microsoft Windows XP
+E98. MISP [aka Malware Information Sharing Platform (MISP)]
+E99. WinExe
+E100. WS_FTP
+E101. Win32k
+E102. dnscat
+E103. WinRAR
+E104. PowerShell [aka powershell.exe, PowerShell (powershell.exe)]
+E105. ROMFUSClient.exe
+E106. 223329.exe
+E107. cscript.exe
+E108. Windows Script Host (wscript.exe) [aka wscript.exe, Windows Script Host]
+E109. Qualys SSL Client Test
+E110. 62ea.exe
+E111. csrss.exe
+E112. alt.exe
+E113. rutserv.exe
+E114. hostname
+E115. install.msi
+E116. host_news_mod_mod.msi
+E117. ULTRAVNC
+E118. TALESHOT
+E119. certutil
+E120. ssh.exe [aka SSH]
+E121. b.exe
+E122. Skype.exe
+E123. one.exe
+E124. rfusclient.exe
+E125. zapit.exe
+E126. Sysmon
+E127. regasm.exe
+E128. MSHTA [aka mshta.exe]
+E129. base_update.exe [aka Base-Update.exe]
+E130. vbc.exe
+E131. 966449.exe
+E132. OpenSSL
+E133. sserv.jpg
+E134. OpenVPN
+E135. anketa_21_3_2018 (4).js
+E136. 360Chrome Browser
+E137. ArmyPlusInstaller-v.0.10.23672.exe
+E138. weboffice.exe
+E139. Microsoft Office Word
+E140. Microsoft Office Services and Web Apps
+E141. Microsoft Excel
+E142. IceDragon
+E143. rundll32.exe
+E144. Assistance.rar
+E145. dnsmasq
+E146. ProxyLogon
+E147. ProxyShell
+E148. COOKBOX
+E149. Mozilla Firefox
+E150. PyArmor
+E151. Propagate
+E152. PyInstaller
+E153. SPECTR.Installer
+E154. portable.exe
+E155. InnoSetup
+E156. Impacket
+E157. Protector.bat
+E158. EMPIREPAST
+E159. SMB протокол
+E160. FortiGate
+E161. WHITECAT
+E162. oracle-java.exe
+E163. microsoft-cortana.exe
+Mentions:
+M1. "CVE-2019-0708" (Software) — options: E1, E2, E3, E4
+M2. "Remote Desktop Protocol (RDP)" (Software) — options: E10, E11, E12, E13
+M3. "Microsoft Windows 7 for 32-bit Systems SP1" (Software) — options: E19, E20, E21, E22
+M4. "Microsoft Windows 7 for x64-based Systems SP1" (Software) — options: E28, E23, E21, E22
+M5. "Microsoft Windows Server 2003" (Software) — options: E25, E30, E31, E32
+M6. "Microsoft Windows Server 2008 R2 for Itanium-based Systems SP1" (Software) — options: E23, E27, E22, E20
+M7. "Microsoft Windows Server 2008 R2 for x64-based Systems SP1" (Software) — options: E22, E24, E20, E27
+M8. "Microsoft Windows Server 2008 for 32-bit Systems SP2" (Software) — options: E22, E28, E27, E31
+M9. "Microsoft Windows Server 2008 for Itanium-based Systems SP2" (Software) — options: E22, E24, E20, E23
+M10. "Microsoft Windows Server 2008 for x64-based Systems SP2" (Software) — options: E23, E27, E20, E19
+M11. "Microsoft Windows XP" (Software) — options: E25, E38, E37, E39
+M12. "CVE-2019-17666" (Software) — options: E5, E44, E6, E8
+M13. "CVE-2022-21907" (Software) — options: E47, E48, E49, E50
+M14. "CVE-2018-20253" (Software) — options: E55, E9, E56, E7
+M15. "CVE-2022-30190" (Software) — options: E50, E60, E6, E51
+M16. "CVE-2018-20251" (Software) — options: E9, E56, E55, E2
+M17. "CVE-2018-20252" (Software) — options: E4, E9, E56, E7
+M18. "CVE-2018-20250" (Software) — options: E55, E7, E56, E2
+M19. "CVE-2021-27065" (Software) — options: E62, E63, E52, E64
+M20. "CVE-2018-0854" (Software) — options: E2, E4, E9, E57
+M21. "CVE-2018-8134" (Software) — options: E71, E69, E72, E56
+M22. "CVE-2020-35730" (Software) — options: E68, E75, E67, E9
+M23. "CVE-2024-23692" (Software) — options: E51, E49, E76, E70
+M24. "SMB протокол" (Software) — options: E38, E78, E79, E80
+M25. "TeamViewer" (Software) — options: E83, E85, E86, E87
+M26. "AnyDesk" (Software) — options: E91, E92, E12, E25
+M27. "Windows" (Software) — options: E38, E21, E42, E41
+M28. "WinSCP" (Software) — options: E25, E98, E99, E100
+M29. "rfusclient.exe" (Software) — options: E104, E105, E106, E107
+M30. "Remote Utilities - Host" (Software) — options: E113, E114, E108, E94
+M31. "spi.exe" (Software) — options: E107, E120, E121, E106
+M32. "sysm.exe" (Software) — options: E126, E120, E106, E104
+M33. "BitdefenderWindowsUpdatePackage.exe" (Software) — options: E42, E106, E41, E29
+M34. "Microsoft SQL Server (MSSQL)" (Software) — options: E32, E37, E33, E25
+M35. "SSL 3.0" (Software) — options: E132, E133, E109, E134
+M36. "Microsoft Office" (Software) — options: E25, E1, E138, E139
+M37. "AdvancedRun.exe" (Software) — options: E104, E106, E142, E107
+M38. "Proxmox" (Software) — options: E145, E146, E147, E126
+M39. "installer.exe" (Software) — options: E124, E107, E115, E152
+M40. "VMProtect" (Software) — options: E126, E156, E157, E83
+M41. "62ea.exe" (Software) — options: E107, E123, E162, E106
+
+=== RESPONSE (61.5s, in 4991 / out 7374 tok, stop) ===
+{"v":[{"m":"CVE-2019-0708","id":"NEW","g":"vulnerability identifier","p":"E44","r":"v"},{"m":"Remote Desktop Protocol (RDP)","id":"NEW","g":"Microsoft remote access protocol","p":"E94","r":"v"},{"m":"Microsoft Windows 7 for 32-bit Systems SP1","id":"NEW","g":"32-bit Windows 7 SP1","p":"E28","r":"v"},{"m":"Microsoft Windows 7 for x64-based Systems SP1","id":"NEW","g":"64-bit Windows 7 SP1","p":"E19","r":"v"},{"m":"Microsoft Windows Server 2003","id":"NEW","g":"server operating system","p":"E37","r":"v"},{"m":"Microsoft Windows Server 2008 R2 for Itanium-based Systems SP1","id":"NEW","g":"Itanium Windows Server 2008 R2 SP1","p":"E24","r":"v"},{"m":"Microsoft Windows Server 2008 R2 for x64-based Systems SP1","id":"NEW","g":"64-bit Windows Server 2008 R2 SP1","p":"E23","r":"v"},{"m":"Microsoft Windows Server 2008 for 32-bit Systems SP2","id":"NEW","g":"32-bit Windows Server 2008 SP2","p":"E20","r":"v"},{"m":"Microsoft Windows Server 2008 for Itanium-based Systems SP2","id":"NEW","g":"Itanium Windows Server 2008 SP2","p":"E27","r":"v"},{"m":"Microsoft Windows Server 2008 for x64-based Systems SP2","id":"NEW","g":"64-bit Windows Server 2008 SP2","p":"E22","r":"v"},{"m":"Microsoft Windows XP","id":"NEW","g":"legacy Windows operating system","p":"E97","r":"v"},{"m":"CVE-2019-17666","id":"NEW","g":"vulnerability identifier","p":"E3","r":"v"},{"m":"CVE-2022-21907","id":"NEW","g":"vulnerability identifier","p":"E60","r":"v"},{"m":"CVE-2018-20253","id":"NEW","g":"vulnerability identifier","p":"E4","r":"v"},{"m":"CVE-2022-30190","id":"NEW","g":"vulnerability identifier","p":"E47","r":"v"},{"m":"CVE-2018-20251","id":"NEW","g":"vulnerability identifier","p":"E7","r":"v"},{"m":"CVE-2018-20252","id":"NEW","g":"vulnerability identifier","p":"E55","r":"v"},{"m":"CVE-2018-20250","id":"NEW","g":"vulnerability identifier","p":"E9","r":"v"},{"m":"CVE-2021-27065","id":"NEW","g":"vulnerability identifier","p":null,"r":null},{"m":"CVE-2018-0854","id":"NEW","g":"vulnerability identifier","p":"E56","r":"v"},{"m":"CVE-2018-8134","id":"NEW","g":"vulnerability identifier","p":"E58","r":"v"},{"m":"CVE-2020-35730","id":"NEW","g":"vulnerability identifier","p":"E61","r":"v"},{"m":"CVE-2024-23692","id":"NEW","g":"vulnerability identifier","p":null,"r":null},{"m":"SMB протокол","id":"NEW","g":"server message block protocol","p":"E159","r":"v"},{"m":"TeamViewer","id":"NEW","g":"remote control software","p":null,"r":null},{"m":"AnyDesk","id":"NEW","g":"remote desktop software","p":"E18","r":"v"},{"m":"Windows","id":"NEW","g":"Microsoft operating system","p":"E25","r":"v"},{"m":"WinSCP","id":"NEW","g":"SFTP and FTP client","p":"E83","r":"v"},{"m":"rfusclient.exe","id":"NEW","g":"executable file","p":"E124","r":"v"},{"m":"Remote Utilities - Host","id":"NEW","g":"remote administration software","p":"E17","r":"v"},{"m":"spi.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"sysm.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"BitdefenderWindowsUpdatePackage.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Microsoft SQL Server (MSSQL)","id":"NEW","g":"relational database management system","p":null,"r":null},{"m":"SSL 3.0","id":"NEW","g":"cryptographic protocol version","p":null,"r":null},{"m":"Microsoft Office","id":"NEW","g":"productivity software suite","p":"E1","r":"b"},{"m":"AdvancedRun.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Proxmox","id":"NEW","g":"virtualization platform","p":null,"r":null},{"m":"installer.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"VMProtect","id":"NEW","g":"software protection tool","p":null,"r":null},{"m":"62ea.exe","id":"NEW","g":"executable file","p":"E110","r":"v"}]}

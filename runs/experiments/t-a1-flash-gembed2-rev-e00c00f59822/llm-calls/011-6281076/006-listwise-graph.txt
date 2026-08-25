@@ -1,0 +1,511 @@
+=== REQUEST (gemini gemini-3.7-flash) ===
+--- sampling ---
+{"temperature":0}
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 257 canonicals"
+Entities:
+E1. us-east-console.awsplatform.online
+E2. awsplatform.online
+E3. aws-online.cloud
+E4. eu-central-1-aws.mfa-gov.cloud
+E5. eu-central-1.mfa-gov.cloud
+E6. ca-west-1.mfa-gov.cloud
+E7. us-west-1.aws-ukraine.cloud
+E8. eu-central-1.ukrtelecom.cloud
+E9. aws-secure.cloud
+E10. us-west-2-aws.mfa-gov.cloud
+E11. us-east-1-aws.mfa-gov.cloud
+E12. mfa-gov.cloud
+E13. ca-central-1.awsplatform.online
+E14. eu-south-1-aws.mfa-gov.cloud
+E15. us-west-1.ukrtelecom.cloud
+E16. ua-gov.cloud
+E17. eu-central-2-aws.ua-aws.army
+E18. us-west-1.ua-aws.army
+E19. ua-aws.army
+E20. us-east-2-aws.ua-gov.cloud
+E21. eu-south-2-aws.mfa-gov.cloud
+E22. eu-north-1-aws.ua-gov.cloud
+E23. s3-aws.cloud
+E24. ukrtelecom.cloud
+E25. eu-north-1-aws.ua-energy.cloud
+E26. s3-ua.cloud
+E27. eu-southeast-1-aws.govtr.cloud
+E28. central-2-aws.ua-aws.army
+E29. us-west-1-amazon.ua-energy.cloud
+E30. eu-southeast-1-aws.gov-ua.cloud
+E31. ua-energy.cloud
+E32. furqaanenergy.com
+E33. eu-southeast-1-aws.zero-trust.solutions
+E34. gov-ua.cloud
+E35. govua.cloud
+E36. gov-aws.cloud
+E37. govtr.cloud
+E38. zero-trust.solutions
+E39. gov-trust.cloud
+E40. aws-join.cloud
+E41. group-teneta.online
+E42. aws-ukraine.cloud
+E43. afi-ukraine.org
+E44. object-storage-service.com
+E45. 01mirror.com.ua
+E46. captcha-challenge.com
+E47. mirotrent.com
+E48. protectconnections.com
+E49. agro-sk.com.ua
+E50. accept-action.site
+E51. staticgl.one
+E52. ukrnet.01mirror.com.ua
+E53. govps.cloud
+E54. ua-sec.cloud
+E55. ertel-audit.com
+E56. aws-data.cloud
+E57. aws-meetings.cloud
+E58. aws-il.cloud
+E59. aws-meet.cloud
+E60. s3-de.cloud
+E61. s3-rand.cloud
+E62. aws-s3.cloud
+E63. mod-gov-il.cloud
+E64. mfa-gov-il.cloud
+E65. eru-gov.cloud
+E66. my-gov.cloud
+E67. gov-fi.cloud
+E68. feedzai-gov.cloud
+E69. gov-gr.cloud
+E70. gov-au.cloud
+E71. gov-lv.cloud
+E72. gov-lt.cloud
+E73. gov-pl.cloud
+E74. mil-pl.cloud
+E75. helpdesk.katolik.bydgoszcz.pl
+E76. mfa-gov-tr.cloud
+E77. dpsu-gov-ua.com
+E78. tax-gov-ua.com
+E79. gov-sk.cloud
+E80. aplusmodgovua.workers.dev
+E81. nbu-gov.cloud
+E82. uoou-gov.cloud
+E83. md-gov.cloud
+E84. vlada-gov.cloud
+E85. mf-gov.cloud
+E86. mzd-gov.cloud
+E87. mo-gov.cloud
+E88. mv-gov.cloud
+E89. mpo-gov.cloud
+E90. mpsv-gov.cloud
+E91. mzp-gov.cloud
+E92. mzv-gov.cloud
+E93. mmr-gov.cloud
+E94. nakit-gov.cloud
+E95. my.mail-gov.net
+E96. mze-gov.cloud
+E97. nukib-gov.cloud
+E98. msmt-gov.cloud
+E99. uohs-gov.cloud
+E100. voa-gov.cloud
+E101. mil-ee.cloud
+E102. s3-be.cloud
+E103. mil-pt.cloud
+E104. ua-mil.cloud
+E105. milgov.host
+E106. milgov.site
+E107. ua-se.cloud
+E108. mil-be.cloud
+E109. s3-pt.cloud
+E110. s3-csis.cloud
+E111. s3-rackspace.cloud
+E112. s3-army.cloud
+E113. s3-atlassian.cloud
+E114. s3-dk.cloud
+E115. s3-iri.cloud
+E116. s3-nato.cloud
+E117. s3-acronis.cloud
+E118. s3-stig.cloud
+E119. s3-marcus.cloud
+E120. s3-zoho.cloud
+E121. s3-hudson.cloud
+E122. s3-bah.cloud
+E123. s3-dgap.cloud
+E124. s3-fbi.cloud
+E125. s3-esa.cloud
+E126. s3-state.cloud
+E127. s3-dnc.cloud
+E128. s3-ida.cloud
+E129. s3-nsa.cloud
+E130. s3-spacex.cloud
+E131. s3-ned.cloud
+E132. s3-proofpoint.cloud
+E133. s3-knowbe4.cloud
+E134. s3-ucia.cloud
+E135. documents-reader.com
+E136. ua-sn.cloud
+E137. gieannualconferenceinmunich.com
+E138. adobeprotectcheck.com
+E139. annualgieconferenceinmunich2024.com
+E140. god-le.com
+E141. cdnauthsoft.com
+E142. get.god-le.com
+E143. desktopapluscom.workers.dev
+E144. armyplus-desktop.workers.dev
+E145. desktopaplus.workers.dev
+E146. armylpus.workers.dev
+E147. documentreader.net
+E148. clouddrive.world
+E149. check.sign-cert.com
+E150. webappapiservice.life
+E151. get.sign-cert.com
+E152. emtserviceca.info
+E153. aplusdesktop.workers.dev
+E154. delta.milgov.site
+E155. newyorktlimes.life
+E156. share-drive.site
+E157. device.redirecl.com
+E158. svc.odwebp.com
+E159. cancel-auth.site
+E160. derzhposluhy.com
+E161. telegram-auth.website
+E162. www.telegram-auth.website
+E163. telegram-confirm.site
+E164. telegramm-account.site
+E165. telegram-account.host
+E166. telegram.qweasdzx.site
+E167. telegram.check-active.site
+E168. web-telegram.host
+E169. web.web.telegram-account.host
+E170. qsrgh.site
+E171. confirmphone.site
+E172. teneta.site
+E173. kropyva.site
+E174. qaz.im
+E175. telegram.token-defender.cloud
+E176. defender-bot.site
+E177. telegram.defender-bot.site
+E178. cloud.god-le.net
+E179. doc.gmail.com.gyehddhrggdii323sdhnshiswh2udhqjwdhhfjcjeuejcj.zhblz.com
+E180. mail.zhblz.com
+E181. google.share-drive.site
+E182. google.drive-share.site
+E183. www.google-drive.site
+E184. 658pvbhj2k7veemmv4.web.telegram-account.host
+E185. web.teiegram.host
+E186. spam.web-telegram.host
+E187. web.telegram-account.host
+E188. teiegram.host
+E189. 212nj0b42w.web.telegram-account.host
+E190. www.teiegram.host
+E191. drive.redirecl.com
+E192. dhl.redirecl.com
+E193. mail-gov.com
+E194. cancel-action.site
+E195. check-active.site
+E196. docs.google.com.spreadsheets.d.1ip6eeakdebmwteh36vana4hu-glaeksstsht-boujdk.zhblz.com
+E197. mail.outloolc.com
+E198. drive-share.site
+E199. www.qsrgh.site
+E200. i-ua.account-guard.site
+E201. account-saver.com
+E202. account-viewer.com
+E203. web.telegramm-account.site
+E204. www.telegramm-account.site
+E205. signal-confirm.site
+E206. www.signal-confirm.site
+E207. whatsapp-confirm.site
+E208. www.confirm-signal.site
+E209. teneta.group
+E210. group.teneta.site
+E211. group-invitation.site
+E212. kropyva.group
+E213. www.accept-action.site
+E214. account-guard.site
+E215. confirm.account-viewer.com
+E216. live.outloolc.com
+E217. in-touc.com
+E218. get.in-touc.com
+E219. whatsapp.protect-password.site
+E220. whatsapp.group-invitation.site
+E221. protectraid.com
+E222. www.protect-password.site
+E223. protect-password.site
+E224. token-defender.cloud
+E225. qweasdzx.site
+E226. get.mail-gov.com
+E227. mail-gov.net
+E228. cloud.account-viewer.com
+E229. plntr.account-viewer.com
+E230. ivanti.account-viewer.com
+E231. stellar.account-viewer.com
+E232. calendar.stib.com.ua
+E233. femundengerdal.no
+E234. redirecl.com
+E235. rozsenich.com
+E236. group.kropyva.site
+E237. uspp.derzhposluhy.com
+E238. god-le.net
+E239. winupmirror.support
+E240. passport-ukr-net.site
+E241. edisk.ukrnet.01mirror.com.ua
+E242. gurt.duna.ua
+E243. sign-cert.com
+E244. mails.support
+E245. edisk.in.ua
+E246. imgurl.ir
+E247. plntr.mirotrent.com
+E248. outloolc.com
+Mentions:
+M1. "ca-central-1.awsplatform.online" (Domain) — options: E1, E2, E3, E4
+M2. "ca-west-1.mfa-gov.cloud" (Domain) — options: E10, E11, E5, E12
+M3. "central-2-aws.ua-aws.army" (Domain) — options: E17, E18, E19, E20
+M4. "eu-central-1-aws.mfa-gov.cloud" (Domain) — options: E5, E14, E21, E22
+M5. "eu-central-1.mfa-gov.cloud" (Domain) — options: E4, E14, E8, E11
+M6. "eu-central-1.ukrtelecom.cloud" (Domain) — options: E15, E24, E5, E4
+M7. "eu-central-2-aws.ua-aws.army" (Domain) — options: E28, E19, E18, E4
+M8. "eu-north-1-aws.ua-energy.cloud" (Domain) — options: E29, E22, E30, E31
+M9. "eu-north-1-aws.ua-gov.cloud" (Domain) — options: E30, E14, E25, E20
+M10. "eu-south-1-aws.mfa-gov.cloud" (Domain) — options: E21, E4, E22, E5
+M11. "eu-south-2-aws.mfa-gov.cloud" (Domain) — options: E14, E4, E22, E10
+M12. "eu-southeast-1-aws.gov-ua.cloud" (Domain) — options: E22, E27, E20, E14
+M13. "eu-southeast-1-aws.govtr.cloud" (Domain) — options: E30, E36, E14, E33
+M14. "eu-southeast-1-aws.zero-trust.solutions" (Domain) — options: E38, E27, E30, E9
+M15. "us-east-1-aws.mfa-gov.cloud" (Domain) — options: E10, E20, E4, E14
+M16. "us-east-2-aws.ua-gov.cloud" (Domain) — options: E22, E11, E30, E10
+M17. "us-east-console.awsplatform.online" (Domain) — options: E13, E2, E3, E20
+M18. "us-west-1-amazon.ua-energy.cloud" (Domain) — options: E25, E15, E31, E18
+M19. "us-west-1.aws-ukraine.cloud" (Domain) — options: E42, E15, E18, E29
+M20. "us-west-1.ua-aws.army" (Domain) — options: E28, E19, E7, E17
+M21. "us-west-1.ukrtelecom.cloud" (Domain) — options: E7, E8, E24, E29
+M22. "us-west-2-aws.mfa-gov.cloud" (Domain) — options: E11, E20, E6, E21
+M23. "zero-trust.solutions" (Domain) — options: E33, E45, E39, E46
+M24. "ukrtelecom.cloud" (Domain) — options: E8, E15, E16, E31
+M25. "awsplatform.online" (Domain) — options: E13, E1, E3, E41
+M26. "aws-ukraine.cloud" (Domain) — options: E7, E3, E17, E40
+M27. "aws-s3.cloud" (Domain) — options: E23, E9, E44, E58
+M28. "aws-meet.cloud" (Domain) — options: E57, E56, E40, E58
+M29. "aws-il.cloud" (Domain) — options: E63, E62, E64, E9
+M30. "aws-data.cloud" (Domain) — options: E9, E58, E40, E62
+M31. "aws-meetings.cloud" (Domain) — options: E59, E56, E40, E58
+M32. "aws-secure.cloud" (Domain) — options: E3, E59, E62, E56
+M33. "aws-join.cloud" (Domain) — options: E59, E58, E56, E57
+M34. "aws-online.cloud" (Domain) — options: E9, E42, E2, E40
+M35. "gov-au.cloud" (Domain) — options: E35, E36, E65, E66
+M36. "gov-aws.cloud" (Domain) — options: E27, E70, E23, E4
+M37. "gov-fi.cloud" (Domain) — options: E66, E70, E34, E65
+M38. "gov-gr.cloud" (Domain) — options: E66, E70, E34, E65
+M39. "gov-lt.cloud" (Domain) — options: E71, E65, E66, E70
+M40. "gov-lv.cloud" (Domain) — options: E72, E65, E66, E70
+M41. "gov-pl.cloud" (Domain) — options: E71, E70, E74, E66
+M42. "gov-sk.cloud" (Domain) — options: E66, E70, E49, E71
+M43. "gov-trust.cloud" (Domain) — options: E66, E70, E76, E38
+M44. "gov-ua.cloud" (Domain) — options: E35, E16, E26, E77
+M45. "govps.cloud" (Domain) — options: E37, E73, E36, E71
+M46. "govtr.cloud" (Domain) — options: E27, E69, E39, E53
+M47. "govua.cloud" (Domain) — options: E34, E53, E30, E70
+M48. "eru-gov.cloud" (Domain) — options: E66, E81, E68, E22
+M49. "feedzai-gov.cloud" (Domain) — options: E67, E84, E16, E65
+M50. "md-gov.cloud" (Domain) — options: E66, E86, E65, E87
+M51. "mf-gov.cloud" (Domain) — options: E12, E65, E5, E83
+M52. "mo-gov.cloud" (Domain) — options: E66, E89, E65, E83
+M53. "mpo-gov.cloud" (Domain) — options: E90, E87, E65, E68
+M54. "mpsv-gov.cloud" (Domain) — options: E89, E88, E65, E91
+M55. "msmt-gov.cloud" (Domain) — options: E90, E93, E16, E65
+M56. "mv-gov.cloud" (Domain) — options: E87, E92, E65, E66
+M57. "my-gov.cloud" (Domain) — options: E39, E83, E16, E95
+M58. "mzd-gov.cloud" (Domain) — options: E91, E83, E65, E96
+M59. "mze-gov.cloud" (Domain) — options: E86, E92, E65, E91
+M60. "mzp-gov.cloud" (Domain) — options: E86, E92, E65, E96
+M61. "mzv-gov.cloud" (Domain) — options: E91, E88, E65, E86
+M62. "nakit-gov.cloud" (Domain) — options: E66, E97, E98, E65
+M63. "nbu-gov.cloud" (Domain) — options: E97, E65, E34, E82
+M64. "nukib-gov.cloud" (Domain) — options: E81, E94, E16, E65
+M65. "policie-gov.cloud" (Domain) — options: E82, E65, E96, E73
+M66. "mmr-gov.cloud" (Domain) — options: E66, E98, E16, E65
+M67. "uohs-gov.cloud" (Domain) — options: E82, E65, E66, E87
+M68. "uoou-gov.cloud" (Domain) — options: E99, E65, E34, E81
+M69. "vlada-gov.cloud" (Domain) — options: E66, E100, E16, E65
+M70. "voa-gov.cloud" (Domain) — options: E34, E12, E16, E65
+M71. "mfa-gov.cloud" (Domain) — options: E85, E76, E64, E16
+M72. "mfa-gov-il.cloud" (Domain) — options: E12, E76, E63, E85
+M73. "mfa-gov-tr.cloud" (Domain) — options: E12, E64, E85, E39
+M74. "mil-be.cloud" (Domain) — options: E101, E102, E74, E103
+M75. "mil-ee.cloud" (Domain) — options: E74, E108, E103, E104
+M76. "mil-pl.cloud" (Domain) — options: E101, E103, E73, E108
+M77. "mil-pt.cloud" (Domain) — options: E101, E74, E109, E108
+M78. "mod-gov-il.cloud" (Domain) — options: E64, E83, E58, E66
+M79. "s3-acronis.cloud" (Domain) — options: E23, E110, E62, E111
+M80. "s3-army.cloud" (Domain) — options: E116, E23, E19, E18
+M81. "s3-atlassian.cloud" (Domain) — options: E23, E62, E117, E112
+M82. "s3-aws.cloud" (Domain) — options: E62, E36, E44, E117
+M83. "s3-bah.cloud" (Domain) — options: E102, E62, E60, E26
+M84. "s3-be.cloud" (Domain) — options: E60, E108, E114, E122
+M85. "s3-blackberry.cloud" (Domain) — options: E102, E62, E114, E117
+M86. "s3-csis.cloud" (Domain) — options: E118, E23, E62, E125
+M87. "s3-de.cloud" (Domain) — options: E114, E102, E62, E127
+M88. "s3-dgap.cloud" (Domain) — options: E60, E122, E62, E23
+M89. "s3-dk.cloud" (Domain) — options: E60, E62, E102, E127
+M90. "s3-dnc.cloud" (Domain) — options: E114, E60, E62, E44
+M91. "s3-esa.cloud" (Domain) — options: E129, E62, E130, E128
+M92. "s3-fbi.cloud" (Domain) — options: E129, E102, E115, E62
+M93. "s3-hudson.cloud" (Domain) — options: E44, E23, E62, E126
+M94. "s3-ida.cloud" (Domain) — options: E60, E26, E62, E115
+M95. "s3-iri.cloud" (Domain) — options: E128, E124, E62, E60
+M96. "s3-knowbe4.cloud" (Domain) — options: E102, E23, E62, E131
+M97. "s3-marcus.cloud" (Domain) — options: E60, E112, E23, E62
+M98. "s3-monitoring.cloud" (Domain) — options: E23, E62, E118, E117
+M99. "s3-nato.cloud" (Domain) — options: E129, E126, E62, E125
+M100. "s3-ned.cloud" (Domain) — options: E60, E102, E129, E62
+M101. "s3-nsa.cloud" (Domain) — options: E26, E125, E62, E60
+M102. "s3-proofpoint.cloud" (Domain) — options: E133, E62, E109, E23
+M103. "s3-pt.cloud" (Domain) — options: E60, E102, E103, E114
+M104. "s3-rackspace.cloud" (Domain) — options: E44, E130, E62, E61
+M105. "s3-rand.cloud" (Domain) — options: E111, E23, E62, E60
+M106. "s3-spacex.cloud" (Domain) — options: E44, E126, E111, E62
+M107. "s3-state.cloud" (Domain) — options: E118, E130, E62, E60
+M108. "s3-stig.cloud" (Domain) — options: E126, E62, E61, E110
+M109. "s3-ua.cloud" (Domain) — options: E44, E134, E34, E20
+M110. "s3-ucia.cloud" (Domain) — options: E26, E62, E129, E110
+M111. "s3-zoho.cloud" (Domain) — options: E44, E122, E116, E62
+M112. "ua-aws.army" (Domain) — options: E17, E28, E18, E20
+M113. "ua-energy.cloud" (Domain) — options: E25, E29, E107, E54
+M114. "ua-gov.cloud" (Domain) — options: E22, E34, E20, E12
+M115. "ua-mil.cloud" (Domain) — options: E16, E108, E101, E107
+M116. "ua-sec.cloud" (Domain) — options: E107, E34, E136, E26
+M117. "ua-se.cloud" (Domain) — options: E54, E34, E136, E26
+M118. "ua-sn.cloud" (Domain) — options: E54, E107, E34, E26
+M119. "townoflakelure.com" (Domain) — options: E75, E137, E138, E9
+M120. "aplusdesktop.workers.dev" (Domain) — options: E143, E144, E145, E80
+M121. "object-storage-service.com" (Domain) — options: E141, E149, E150, E138
+M122. "desktopaplus.workers.dev" (Domain) — options: E143, E153, E80, E44
+M123. "webappapiservice.life" (Domain) — options: E44, E155, E141, E152
+M124. "cdnauthsoft.com" (Domain) — options: E138, E159, E44, E139
+M125. "desktopapluscom.workers.dev" (Domain) — options: E145, E153, E80, E44
+M126. "telegram-auth.website" (Domain) — options: E162, E163, E164, E159
+M127. "qweasdzx.site" (Domain) — options: E166, E44, E170, E106
+M128. "token-defender.cloud" (Domain) — options: E175, E176, E59, E141
+M129. "armylpus.workers.dev" (Domain) — options: E144, E153, E145, E44
+M130. "docs.google.com.spreadsheets.d.1ip6eeakdebmwteh36vana4hu-glaeksstsht-boujdk.zhblz.com" (Domain) — options: E147, E179, E180, E44
+M131. "aplusmodgovua.workers.dev" (Domain) — options: E143, E153, E44, E146
+M132. "armyplus-desktop.workers.dev" (Domain) — options: E146, E153, E143, E145
+M133. "wvtmsouaa2gt6jmcuxj5hkfrqdss5lhecoqijt5dl7gfruueu3i5mkad.onion" (Domain) — options: E174, E1, E117, E44
+M134. "web-telegram.host" (Domain) — options: E169, E185, E186, E187
+M135. "redirecl.com" (Domain) — options: E157, E191, E138, E192
+M136. "cancel-auth.site" (Domain) — options: E141, E194, E50, E161
+M137. "doc.gmail.com.gyehddhrggdii323sdhnshiswh2udhqjwdhhfjcjeuejcj.zhblz.com" (Domain) — options: E196, E180, E183, E193
+M138. "www.google-drive.site" (Domain) — options: E182, E181, E156, E44
+M139. "account-guard.site" (Domain) — options: E200, E201, E164, E202
+M140. "telegram-confirm.site" (Domain) — options: E161, E205, E164, E166
+M141. "check-active.site" (Domain) — options: E138, E167, E50, E149
+M142. "group-teneta.online" (Domain) — options: E209, E210, E44, E211
+M143. "accept-action.site" (Domain) — options: E213, E44, E194, E138
+M144. "telegramm-account.site" (Domain) — options: E204, E203, E165, E214
+M145. "cancel-action.site" (Domain) — options: E159, E50, E213, E44
+M146. "confirmphone.site" (Domain) — options: E208, E163, E173, E141
+M147. "signal-confirm.site" (Domain) — options: E206, E208, E163, E171
+M148. "newyorktlimes.life" (Domain) — options: E44, E150, E137, E195
+M149. "outloolc.com" (Domain) — options: E197, E216, E44, E138
+M150. "whatsapp-confirm.site" (Domain) — options: E219, E205, E163, E220
+M151. "www.confirm-signal.site" (Domain) — options: E206, E205, E171, E163
+M152. "adobeprotectcheck.com" (Domain) — options: E48, E221, E139, E141
+M153. "protect-password.site" (Domain) — options: E222, E219, E48, E138
+M154. "defender-bot.site" (Domain) — options: E177, E175, E159, E224
+M155. "qsrgh.site" (Domain) — options: E199, E44, E106, E159
+M156. "mail.zhblz.com" (Domain) — options: E44, E193, E75, E197
+M157. "telegram-account.host" (Domain) — options: E187, E169, E188, E164
+M158. "clouddrive.world" (Domain) — options: E44, E228, E156, E141
+M159. "account-viewer.com" (Domain) — options: E215, E228, E229, E230
+M160. "captcha-challenge.com" (Domain) — options: E138, E232, E44, E139
+M161. "emtserviceca.info" (Domain) — options: E137, E44, E150, E48
+M162. "mail-gov.com" (Domain) — options: E227, E226, E197, E95
+M163. "account-saver.com" (Domain) — options: E48, E202, E44, E228
+M164. "milgov.host" (Domain) — options: E106, E101, E193, E154
+M165. "group-invitation.site" (Domain) — options: E220, E44, E236, E210
+M166. "sign-cert.com" (Domain) — options: E151, E149, E44, E217
+M167. "milgov.site" (Domain) — options: E105, E154, E101, E227
+M168. "dpsu-gov-ua.com" (Domain) — options: E43, E78, E34, E49
+M169. "derzhposluhy.com" (Domain) — options: E43, E49, E237, E232
+M170. "mail-gov.net" (Domain) — options: E193, E95, E226, E105
+M171. "mails.support" (Domain) — options: E180, E239, E193, E227
+M172. "share-drive.site" (Domain) — options: E198, E181, E182, E183
+M173. "passport-ukr-net.site" (Domain) — options: E43, E156, E223, E147
+M174. "afi-ukraine.org" (Domain) — options: E49, E42, E232, E7
+M175. "tax-gov-ua.com" (Domain) — options: E43, E77, E34, E49
+M176. "teiegram.host" (Domain) — options: E190, E185, E168, E105
+M177. "documentreader.net" (Domain) — options: E135, E238, E44, E227
+M178. "protectconnections.com" (Domain) — options: E221, E138, E139, E44
+M179. "calendar.stib.com.ua" (Domain) — options: E43, E45, E75, E49
+M180. "gieannualconferenceinmunich.com" (Domain) — options: E139, E138, E44, E235
+M181. "annualgieconferenceinmunich2024.com" (Domain) — options: E137, E138, E44, E235
+M182. "kropyva.site" (Domain) — options: E212, E236, E43, E210
+M183. "edisk.in.ua" (Domain) — options: E49, E232, E241, E217
+M184. "helpdesk.katolik.bydgoszcz.pl" (Domain) — options: E32, E73, E116, E137
+M185. "furqaanenergy.com" (Domain) — options: E75, E31, E138, E137
+M186. "ertel-audit.com" (Domain) — options: E137, E221, E159, E138
+M187. "kropyva.group" (Domain) — options: E236, E173, E242, E209
+M188. "odwebp.com" (Domain) — options: E44, E158, E141, E138
+M189. "teneta.group" (Domain) — options: E210, E41, E172, E212
+M190. "rozsenich.com" (Domain) — options: E137, E138, E55, E139
+M191. "protectraid.com" (Domain) — options: E48, E138, E223, E139
+M192. "drive-share.site" (Domain) — options: E156, E182, E181, E44
+M193. "agro-sk.com.ua" (Domain) — options: E43, E45, E79, E232
+M194. "teneta.site" (Domain) — options: E209, E210, E41, E159
+M195. "winupmirror.support" (Domain) — options: E141, E244, E44, E45
+M196. "gurt.duna.ua" (Domain) — options: E49, E245, E45, E43
+M197. "01mirror.com.ua" (Domain) — options: E49, E232, E52, E43
+M198. "documents-reader.com" (Domain) — options: E147, E138, E44, E201
+M199. "imgurl.ir" (Domain) — options: E174, E233, E242, E44
+M200. "god-le.net" (Domain) — options: E140, E178, E142, E147
+M201. "god-le.com" (Domain) — options: E238, E142, E137, E72
+M202. "staticgl.one" (Domain) — options: E141, E2, E126, E44
+M203. "mirotrent.com" (Domain) — options: E48, E247, E137, E243
+M204. "in-touc.com" (Domain) — options: E218, E55, E243, E248
+
+=== RESPONSE (36.6s, in 12099 / out 4740 tok, STOP) ===
+{"v":[{"m":"M1","id":"NEW","g":null,"p":"E2","r":"p"},{"m":"M2","id":"NEW","g":null,"p":"E12","r":"p"},{"m":"M3","id":"NEW","g":null,"p":"E19","r":"p"},{"m":"M4","id":"NEW","g":null,"p":"E12","r":"p"},{"m":"M5","id":"NEW","g":null,"p":"E12","r":"p"},{"m":"M6","id":"NEW","g":null,"p":"E24","r":"p"},{"m":"M7","id":"NEW","g":null,"p":"E19","r":"p"},{"m":"M8","id":"NEW","g":null,"p":"E31","r":"p"},{"m":"M9","id":"NEW","g":null,"p":"E16","r":"p"},{"m":"M10","id":"NEW","g":null,"p":"E12","r":"p"},{"m":"M11","id":"NEW","g":null,"p":"E12","r":"p"},{"m":"M12","id":"NEW","g":null,"p":"E34","r":"p"},{"m":"M13","id":"NEW","g":null,"p":"E37","r":"p"},{"m":"M14","id":"NEW","g":null,"p":"E38","r":"p"},{"m":"M15","id":"NEW","g":null,"p":"E12","r":"p"},{"m":"M16","id":"NEW","g":null,"p":"E16","r":"p"},{"m":"M17","id":"NEW","g":null,"p":"E2","r":"p"},{"m":"M18","id":"NEW","g":null,"p":"E31","r":"p"},{"m":"M19","id":"NEW","g":null,"p":"E42","r":"p"},{"m":"M20","id":"NEW","g":null,"p":"E19","r":"p"},{"m":"M21","id":"NEW","g":null,"p":"E24","r":"p"},{"m":"M22","id":"NEW","g":null,"p":"E12","r":"p"},{"m":"M23","id":"NEW","g":null,"p":"E33","r":"b"},{"m":"M24","id":"NEW","g":null,"p":"E8","r":"b"},{"m":"M25","id":"NEW","g":null,"p":"E1","r":"b"},{"m":"M26","id":"NEW","g":null,"p":"E7","r":"b"},{"m":"M27","id":"NEW","g":null,"p":null,"r":null},{"m":"M28","id":"NEW","g":null,"p":null,"r":null},{"m":"M29","id":"NEW","g":null,"p":null,"r":null},{"m":"M30","id":"NEW","g":null,"p":null,"r":null},{"m":"M31","id":"NEW","g":null,"p":null,"r":null},{"m":"M32","id":"E9","g":null,"p":null,"r":null},{"m":"M33","id":"NEW","g":null,"p":null,"r":null},{"m":"M34","id":"NEW","g":null,"p":null,"r":null},{"m":"M35","id":"NEW","g":null,"p":null,"r":null},{"m":"M36","id":"NEW","g":null,"p":null,"r":null},{"m":"M37","id":"NEW","g":null,"p":null,"r":null},{"m":"M38","id":"NEW","g":null,"p":null,"r":null},{"m":"M39","id":"NEW","g":null,"p":null,"r":null},{"m":"M40","id":"NEW","g":null,"p":null,"r":null},{"m":"M41","id":"NEW","g":null,"p":null,"r":null},{"m":"M42","id":"NEW","g":null,"p":null,"r":null},{"m":"M43","id":"NEW","g":null,"p":null,"r":null},{"m":"M44","id":"NEW","g":null,"p":null,"r":null},{"m":"M45","id":"NEW","g":null,"p":null,"r":null},{"m":"M46","id":"NEW","g":null,"p":null,"r":null},{"m":"M47","id":"NEW","g":null,"p":null,"r":null},{"m":"M48","id":"NEW","g":null,"p":null,"r":null},{"m":"M49","id":"NEW","g":null,"p":null,"r":null},{"m":"M50","id":"NEW","g":null,"p":null,"r":null},{"m":"M51","id":"NEW","g":null,"p":null,"r":null},{"m":"M52","id":"NEW","g":null,"p":null,"r":null},{"m":"M53","id":"NEW","g":null,"p":null,"r":null},{"m":"M54","id":"NEW","g":null,"p":null,"r":null},{"m":"M55","id":"NEW","g":null,"p":null,"r":null},{"m":"M56","id":"NEW","g":null,"p":null,"r":null},{"m":"M57","id":"NEW","g":null,"p":null,"r":null},{"m":"M58","id":"NEW","g":null,"p":null,"r":null},{"m":"M59","id":"NEW","g":null,"p":null,"r":null},{"m":"M60","id":"NEW","g":null,"p":null,"r":null},{"m":"M61","id":"NEW","g":null,"p":null,"r":null},{"m":"M62","id":"NEW","g":null,"p":null,"r":null},{"m":"M63","id":"NEW","g":null,"p":null,"r":null},{"m":"M64","id":"NEW","g":null,"p":null,"r":null},{"m":"M65","id":"NEW","g":null,"p":null,"r":null},{"m":"M66","id":"NEW","g":null,"p":null,"r":null},{"m":"M67","id":"NEW","g":null,"p":null,"r":null},{"m":"M68","id":"NEW","g":null,"p":null,"r":null},{"m":"M69","id":"NEW","g":null,"p":null,"r":null},{"m":"M70","id":"NEW","g":null,"p":null,"r":null},{"m":"M71","id":"NEW","g":null,"p":"E4","r":"b"},{"m":"M72","id":"NEW","g":null,"p":null,"r":null},{"m":"M73","id":"NEW","g":null,"p":null,"r":null},{"m":"M74","id":"NEW","g":null,"p":null,"r":null},{"m":"M75","id":"NEW","g":null,"p":null,"r":null},{"m":"M76","id":"NEW","g":null,"p":null,"r":null},{"m":"M77","id":"NEW","g":null,"p":null,"r":null},{"m":"M78","id":"NEW","g":null,"p":null,"r":null},{"m":"M79","id":"NEW","g":null,"p":null,"r":null},{"m":"M80","id":"NEW","g":null,"p":null,"r":null},{"m":"M81","id":"NEW","g":null,"p":null,"r":null},{"m":"M82","id":"NEW","g":null,"p":null,"r":null},{"m":"M83","id":"NEW","g":null,"p":null,"r":null},{"m":"M84","id":"NEW","g":null,"p":null,"r":null},{"m":"M85","id":"NEW","g":null,"p":null,"r":null},{"m":"M86","id":"NEW","g":null,"p":null,"r":null},{"m":"M87","id":"NEW","g":null,"p":null,"r":null},{"m":"M88","id":"NEW","g":null,"p":null,"r":null},{"m":"M89","id":"NEW","g":null,"p":null,"r":null},{"m":"M90","id":"NEW","g":null,"p":null,"r":null},{"m":"M91","id":"NEW","g":null,"p":null,"r":null},{"m":"M92","id":"NEW","g":null,"p":null,"r":null},{"m":"M93","id":"NEW","g":null,"p":null,"r":null},{"m":"M94","id":"NEW","g":null,"p":null,"r":null},{"m":"M95","id":"NEW","g":null,"p":null,"r":null},{"m":"M96","id":"NEW","g":null,"p":null,"r":null},{"m":"M97","id":"NEW","g":null,"p":null,"r":null},{"m":"M98","id":"NEW","g":null,"p":null,"r":null},{"m":"M99","id":"NEW","g":null,"p":null,"r":null},{"m":"M100","id":"NEW","g":null,"p":null,"r":null},{"m":"M101","id":"NEW","g":null,"p":null,"r":null},{"m":"M102","id":"NEW","g":null,"p":null,"r":null},{"m":"M103","id":"NEW","g":null,"p":null,"r":null},{"m":"M104","id":"NEW","g":null,"p":null,"r":null},{"m":"M105","id":"NEW","g":null,"p":null,"r":null},{"m":"M106","id":"NEW","g":null,"p":null,"r":null},{"m":"M107","id":"NEW","g":null,"p":null,"r":null},{"m":"M108","id":"NEW","g":null,"p":null,"r":null},{"m":"M109","id":"NEW","g":null,"p":null,"r":null},{"m":"M110","id":"NEW","g":null,"p":null,"r":null},{"m":"M111","id":"NEW","g":null,"p":null,"r":null},{"m":"M112","id":"NEW","g":null,"p":"E17","r":"b"},{"m":"M113","id":"NEW","g":null,"p":"E25","r":"b"},{"m":"M114","id":"NEW","g":null,"p":"E20","r":"b"},{"m":"M115","id":"NEW","g":null,"p":null,"r":null},{"m":"M116","id":"NEW","g":null,"p":null,"r":null},{"m":"M117","id":"NEW","g":null,"p":null,"r":null},{"m":"M118","id":"NEW","g":null,"p":null,"r":null},{"m":"M119","id":"NEW","g":null,"p":null,"r":null},{"m":"M120","id":"NEW","g":null,"p":null,"r":null},{"m":"M121","id":"NEW","g":null,"p":null,"r":null},{"m":"M122","id":"NEW","g":null,"p":null,"r":null},{"m":"M123","id":"NEW","g":null,"p":null,"r":null},{"m":"M124","id":"NEW","g":null,"p":null,"r":null},{"m":"M125","id":"NEW","g":null,"p":null,"r":null},{"m":"M126","id":"NEW","g":null,"p":"E162","r":"b"},{"m":"M127","id":"NEW","g":null,"p":"E166","r":"b"},{"m":"M128","id":"NEW","g":null,"p":"E175","r":"b"},{"m":"M129","id":"NEW","g":null,"p":null,"r":null},{"m":"M130","id":"NEW","g":null,"p":null,"r":null},{"m":"M131","id":"NEW","g":null,"p":null,"r":null},{"m":"M132","id":"NEW","g":null,"p":null,"r":null},{"m":"M133","id":"NEW","g":null,"p":null,"r":null},{"m":"M134","id":"NEW","g":null,"p":"E186","r":"b"},{"m":"M135","id":"NEW","g":null,"p":"E157","r":"b"},{"m":"M136","id":"NEW","g":null,"p":null,"r":null},{"m":"M137","id":"NEW","g":null,"p":null,"r":null},{"m":"M138","id":"NEW","g":null,"p":null,"r":null},{"m":"M139","id":"NEW","g":null,"p":"E200","r":"b"},{"m":"M140","id":"NEW","g":null,"p":null,"r":null},{"m":"M141","id":"NEW","g":null,"p":"E167","r":"b"},{"m":"M142","id":"NEW","g":null,"p":null,"r":null},{"m":"M143","id":"NEW","g":null,"p":"E213","r":"b"},{"m":"M144","id":"NEW","g":null,"p":"E203","r":"b"},{"m":"M145","id":"NEW","g":null,"p":null,"r":null},{"m":"M146","id":"NEW","g":null,"p":null,"r":null},{"m":"M147","id":"NEW","g":null,"p":"E206","r":"b"},{"m":"M148","id":"NEW","g":null,"p":null,"r":null},{"m":"M149","id":"NEW","g":null,"p":"E197","r":"b"},{"m":"M150","id":"NEW","g":null,"p":null,"r":null},{"m":"M151","id":"NEW","g":null,"p":null,"r":null},{"m":"M152","id":"NEW","g":null,"p":null,"r":null},{"m":"M153","id":"NEW","g":null,"p":"E219","r":"b"},{"m":"M154","id":"NEW","g":null,"p":"E177","r":"b"},{"m":"M155","id":"NEW","g":null,"p":"E199","r":"b"},{"m":"M156","id":"NEW","g":null,"p":null,"r":null},{"m":"M157","id":"NEW","g":null,"p":"E169","r":"b"},{"m":"M158","id":"NEW","g":null,"p":null,"r":null},{"m":"M159","id":"NEW","g":null,"p":"E215","r":"b"},{"m":"M160","id":"NEW","g":null,"p":null,"r":null},{"m":"M161","id":"NEW","g":null,"p":null,"r":null},{"m":"M162","id":"NEW","g":null,"p":"E226","r":"b"},{"m":"M163","id":"NEW","g":null,"p":null,"r":null},{"m":"M164","id":"NEW","g":null,"p":null,"r":null},{"m":"M165","id":"NEW","g":null,"p":"E220","r":"b"},{"m":"M166","id":"NEW","g":null,"p":"E149","r":"b"},{"m":"M167","id":"NEW","g":null,"p":"E154","r":"b"},{"m":"M168","id":"NEW","g":null,"p":null,"r":null},{"m":"M169","id":"NEW","g":null,"p":"E237","r":"b"},{"m":"M170","id":"NEW","g":null,"p":"E95","r":"b"},{"m":"M171","id":"NEW","g":null,"p":null,"r":null},{"m":"M172","id":"NEW","g":null,"p":"E181","r":"b"},{"m":"M173","id":"NEW","g":null,"p":null,"r":null},{"m":"M174","id":"NEW","g":null,"p":null,"r":null},{"m":"M175","id":"NEW","g":null,"p":null,"r":null},{"m":"M176","id":"NEW","g":null,"p":"E185","r":"b"},{"m":"M177","id":"NEW","g":null,"p":null,"r":null},{"m":"M178","id":"NEW","g":null,"p":null,"r":null},{"m":"M179","id":"NEW","g":null,"p":null,"r":null},{"m":"M180","id":"NEW","g":null,"p":null,"r":null},{"m":"M181","id":"NEW","g":null,"p":null,"r":null},{"m":"M182","id":"NEW","g":null,"p":"E236","r":"b"},{"m":"M183","id":"NEW","g":null,"p":null,"r":null},{"m":"M184","id":"NEW","g":null,"p":null,"r":null},{"m":"M185","id":"NEW","g":null,"p":null,"r":null},{"m":"M186","id":"NEW","g":null,"p":null,"r":null},{"m":"M187","id":"NEW","g":null,"p":null,"r":null},{"m":"M188","id":"NEW","g":null,"p":"E158","r":"b"},{"m":"M189","id":"NEW","g":null,"p":null,"r":null},{"m":"M190","id":"NEW","g":null,"p":null,"r":null},{"m":"M191","id":"NEW","g":null,"p":null,"r":null},{"m":"M192","id":"NEW","g":null,"p":"E182","r":"b"},{"m":"M193","id":"NEW","g":null,"p":null,"r":null},{"m":"M194","id":"NEW","g":null,"p":"E210","r":"b"},{"m":"M195","id":"NEW","g":null,"p":null,"r":null},{"m":"M196","id":"NEW","g":null,"p":null,"r":null},{"m":"M197","id":"NEW","g":null,"p":"E52","r":"b"},{"m":"M198","id":"NEW","g":null,"p":null,"r":null},{"m":"M199","id":"NEW","g":null,"p":null,"r":null},{"m":"M200","id":"NEW","g":null,"p":"E178","r":"b"},{"m":"M201","id":"NEW","g":null,"p":"E142","r":"b"},{"m":"M202","id":"NEW","g":null,"p":null,"r":null},{"m":"M203","id":"NEW","g":null,"p":"E247","r":"b"},{"m":"M204","id":"NEW","g":null,"p":"E218","r":"b"}]}

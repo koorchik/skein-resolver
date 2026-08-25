@@ -1,0 +1,498 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 332 canonicals"
+Entities:
+E1. http-vuln-cve2021-26855.nse
+E2. CVE-2021-26857
+E3. CVE-2021-26858
+E4. CVE-2021-27065
+E5. CVE-2020-3255
+E6. CVE-2018-0854
+E7. CVE-2017-0144
+E8. CVE-2020-0601
+E9. CVE-2018-20250
+E10. CVE-2021-26855
+E11. CVE-2020-3187
+E12. CVE-2020-3757
+E13. CVE-2017-0199
+E14. CVE-2018-0958
+E15. CVE-2017-17688
+E16. Troldesh/Shade [aka Troldesh, Shade, Trojan.Encoder.858]
+E17. CVE-2020-3760
+E18. CVE-2020-7047
+E19. CVE-2020-7048
+E20. CVE-2020-3125
+E21. Microsoft Office 2010 [aka Office 2010]
+E22. Microsoft Exchange Server 2013
+E23. Microsoft Exchange Server
+E24. Microsoft Exchange Server 2016
+E25. Microsoft Exchange Server 2019
+E26. Outlook [aka Microsoft Outlook]
+E27. Microsoft Windows Server 2003
+E28. Internet Explorer
+E29. Microsoft Edge
+E30. Microsoft Office 2013 [aka Office 2013]
+E31. Microsoft Exchange Server 2010
+E32. Microsoft SQL Server (MSSQL)
+E33. Windows Server 2016
+E34. Microsoft Office 2016 [aka Office 2016]
+E35. Windows Server 2019
+E36. CVE-2019-0708
+E37. Microsoft Safety Scanner
+E38. VMware Workstation Player
+E39. Mimikatz
+E40. Remote Desktop Protocol (RDP)
+E41. Microsoft Office 2007 [aka Office 2007]
+E42. Remote Utilities - Host
+E43. dnsmasq
+E44. Qualys SSL Client Test
+E45. ckZ89.ExE
+E46. host_news_mod_mod.msi
+E47. Agent Tesla
+E48. spi.exe
+E49. zakon.rar
+E50. Propagate
+E51. Cisco Firepower Threat Defense (FTD) Software
+E52. CVE-2017-8759
+E53. WP Database Reset
+E54. Zenmap
+E55. Corona-virus-Map.com.exe [aka CoronaMap.exe]
+E56. SmartFTP
+E57. ./decpded_page.html
+E58. Mozilla
+E59. ClamAV
+E60. ./перевірити діяльність.html
+E61. MS Office [aka Microsoft Office]
+E62. Microsoft Windows XP
+E63. Microsoft Equation Editor
+E64. csrss.exe
+E65. iOS
+E66. whois
+E67. nginx
+E68. Misha
+E69. Apache
+E70. WS_FTP
+E71. Ursnif
+E72. QIP Surf Browser
+E73. Opera Browser
+E74. VMware Fusion
+E75. SNMP Subagent Stand-Alone for Windows
+E76. Safari
+E77. Orbitum Browser
+E78. Postbox Credential
+E79. Elements Browser
+E80. WordPress
+E81. needrestart
+E82. AZORult
+E83. CentBrowser
+E84. nmap
+E85. OpenPGP [aka PGP]
+E86. CVE-2020-3259
+E87. CVE-2020-3254
+E88. CVE-2020-0609
+E89. CVE-2020-3298
+E90. CVE-2020-0610
+E91. CVE-2020-3283
+E92. CVE-2020-3195
+E93. CVE-2020-3196
+E94. CVE-2020-3111
+E95. CVE-2020-3189
+E96. CVE-2020-3179
+E97. CVE-2020-3110
+E98. CVE-2020-3191
+E99. CVE-2020-3118
+E100. CVE-2020-0611
+E101. CVE-2020-3120
+E102. CVE-2020-3119
+E103. CVE-2020-3759
+E104. CVE-2017-17689
+E105. CVE-2017-11882
+E106. CVE-2017-14491
+E107. CVE-2019-17666
+E108. CVE-2018-8897
+E109. CVE-2018-8170
+E110. CVE-2018-20252
+E111. CVE-2018-20253
+E112. CVE-2018-8120
+E113. CVE-2018-8141
+E114. CVE-2018-8124
+E115. CVE-2018-7602
+E116. CVE-2020-3741
+E117. CVE-2018-7600
+E118. CVE-2018-20251
+E119. CVE-2018-8136
+E120. CVE-2018-8132
+E121. CVE-2018-8134
+E122. CVE-2018-8127
+E123. CVE-2018-8129
+E124. Heartbleed (CVE-2014-0160)
+E125. DROWN (CVE-2016-0800)
+E126. FREAK (CVE-2015-0204)
+E127. Logjam (CVE-2015-4000)
+E128. Cisco IOS XE
+E129. Cisco Adaptive Security Appliance (ASA) Software
+E130. Cisco Firepower Management Center (FMC)
+E131. Chipset Device Software
+E132. ChakraCore
+E133. Cisco Discovery Protocol (CDP)
+E134. Cisco FXOS
+E135. FireEye red team tools
+E136. nslookup
+E137. iOS Mail
+E138. Claws Mail
+E139. 223329.exe
+E140. cmd.exe
+E141. 62ea.exe
+E142. crsse.exe
+E143. sysm.exe
+E144. 966449.exe
+E145. RegAsm.exe
+E146. WinExe
+E147. Linux
+E148. STIX
+E149. ./рахунки ООО Спецстрой.xls.js
+E150. Windows SMBv1
+E151. Windows 7
+E152. Windows 10
+E153. WinRAR
+E154. Windows Vista
+E155. OpenSSL
+E156. rfusclient.exe
+E157. SSL 3.0
+E158. Burp Suite
+E159. Windows Remote Desktop Client
+E160. Test-ProxyLogon.ps1
+E161. Vivaldi Browser
+E162. explorer.exe
+E163. major.exe
+E164. tvOS
+E165. ADODB.Stream
+E166. OpenVPN
+E167. Kometa Browser
+E168. PowerShell [aka powershell.exe]
+E169. Win32k
+E170. Windows [aka Microsoft Windows]
+E171. Firefox [aka Mozilla Firefox]
+E172. Filezilla
+E173. Thunderbird [aka Mozilla Thunderbird]
+E174. Chromium Browser
+E175. Brave Browser
+E176. Gozi
+E177. Amigo Browser
+E178. FTP Commander
+E179. WinSCP
+E180. FTPGetter
+E181. ssj.jpg
+E182. VBScript
+E183. Double Kill
+E184. Paltalk
+E185. icloud.cmd
+E186. Liebao Browser
+E187. Icloud.exe
+E188. iclouds.cmd
+E189. IcloudSecurity.lnk
+E190. OpenIOC
+E191. watchOS
+E192. GreyEnergy
+E193. Компания.png
+E194. Cisco IOS
+E195. iPadOS
+E196. VMRC для Mac
+E197. Chedot Browser
+E198. Apple Mail
+E199. Microsoft Office Services and Web Apps
+E200. jDownloader
+E201. Zoom
+E202. Pocomail
+E203. HXIOC
+E204. НПУ.docx
+E205. Opera Mail
+E206. Adobe Flash Player
+E207. killself.bat
+E208. Drupalgeddon2
+E209. MS Excel
+E210. CDPwn
+E211. DAAL
+E212. SMB протокол
+E213. MS Word [aka Microsoft Word]
+E214. VMware Workstation Pro
+E215. Torch Browser
+E216. Snort
+E217. Adobe Illustrator CC
+E218. Adobe Framemaker
+E219. Yandex Browser
+E220. Foxmail
+E221. Trillian
+E222. S/MIME
+E223. Sonoko
+E224. DigiCert Certificate Inspector
+E225. ChromePlus Browser
+E226. 360Chrome Browser
+E227. Iridium Browser
+E228. 7Star Browser
+E229. Chrome [aka Google Chrome]
+E230. YARA
+E231. VMware Tools
+E232. Iclouding.exe
+E233. timeout.exe
+E234. IceDragon
+E235. Joomla
+E236. spisok_24.08.2018.com
+E237. Лица, которые переместились из АР Крым и районов проведения антитерротистической операции.com
+E238. TeamViewer
+E239. rtlwifi driver
+E240. sserv.jpg
+E241. CMS Drupal
+E242. EFAIL
+E243. Petya
+E244. VPNFilter
+E245. Pterodo
+E246. Zimbra
+E247. Заявка.js
+E248. WinRAR 5.70 Beta 1
+E249. Adobe Reader DC
+E250. Adobe Acrobat Reader
+E251. Adobe Digital Editions
+E252. Gazprombank.zakaz.docx.zip
+E253. CyBOX
+E254. 07.11.18р список.docx
+E255. QUOTATION N0AB.doc
+E256. Cisco IOS XR
+E257. Cisco NX-OS
+E258. info.zip
+E259. рахунки компания технік.zip
+E260. Информация.js
+E261. Malware Information Sharing Platform (MISP)
+E262. VMware Fusion Pro
+E263. Schwarze-Sonne-Remote-Access-Trojan
+E264. Uran Browser
+E265. Citrio Browser
+E266. Firefox для iOS
+E267. Adobe Experience Manager
+E268. Smokeloader
+E269. Coowon Browser
+E270. MS PowerPoint
+E271. VMware ESXi
+E272. Tor
+E273. .NET Framework
+E274. Windows Host Compute Service Shim
+E275. CocCoc Browser
+E276. Firefox ESR
+E277. vaultcli.dll
+E278. installer.exe
+E279. ipad.system
+E280. Comodo Dragon Browser
+E281. Газпромбанк заказ.js
+E282. documents (5).js
+E283. Рахунки за выполненные работы от 11.12.2018.js
+E284. Sputnik Browser
+E285. Moonraker Petya
+E286. Becky!
+E287. inf.zip
+E288. Trojan:Win32/Sonoko.A!ms
+E289. SolarWinds Orion
+E290. Hashcat
+E291. GreyEnergy mini
+E292. Processor Graphics
+E293. RDP Gateway Server
+Mentions:
+M1. "CVE-2021-26855" (Software) — options: E1, E2, E3, E4
+M2. "CVE-2021-26857" (Software) — options: E3, E10, E1, E11
+M3. "CVE-2021-26858" (Software) — options: E10, E2, E1, E4
+M4. "CVE-2021-27065" (Software) — options: E10, E3, E2, E17
+M5. "Microsoft Exchange Server 2010" (Software) — options: E21, E22, E23, E24
+M6. "Microsoft Exchange Server 2013" (Software) — options: E30, E31, E23, E24
+M7. "Microsoft Exchange Server 2016" (Software) — options: E33, E31, E23, E34
+M8. "Microsoft Exchange Server 2019" (Software) — options: E35, E31, E23, E24
+M9. "Exchange On-premises Mitigation Tool (EOMT)" (Software) — options: E37, E38, E23, E39
+M10. "Test-ProxyLogon.ps1" (Software) — options: E43, E44, E45, E46
+M11. "http-vuln-cve2021-26855.nse" (Software) — options: E10, E3, E2, E5
+M12. "nmap" (Software) — options: E54, E28, E43, E55
+M13. "Microsoft Safety Scanner" (Software) — options: E28, E61, E29, E23
+M14. "IIS" (Software) — options: E28, E65, E66, E67
+M15. "Burp Suite" (Software) — options: E70, E71, E72, E73
+M16. "python-requests" (Software) — options: E58, E78, E79, E28
+M17. "Zenmap" (Software) — options: E83, E84, E43, E85
+M18. "CVE-2020-3255" (Software) — options: E86, E87, E8, E20
+M19. "CVE-2020-3191" (Software) — options: E93, E94, E92, E8
+M20. "CVE-2020-3195" (Software) — options: E93, E95, E20, E98
+M21. "CVE-2020-3119" (Software) — options: E93, E95, E97, E8
+M22. "CVE-2020-0601" (Software) — options: E88, E90, E100, E20
+M23. "CVE-2020-3110" (Software) — options: E94, E99, E8, E101
+M24. "CVE-2020-3125" (Software) — options: E93, E101, E8, E92
+M25. "CVE-2020-3111" (Software) — options: E97, E8, E20, E99
+M26. "CVE-2020-0610" (Software) — options: E8, E100, E88, E101
+M27. "CVE-2020-3283" (Software) — options: E89, E11, E86, E8
+M28. "CVE-2020-3196" (Software) — options: E95, E98, E8, E92
+M29. "CVE-2020-3189" (Software) — options: E11, E102, E8, E93
+M30. "CVE-2020-3120" (Software) — options: E20, E97, E8, E93
+M31. "CVE-2020-3179" (Software) — options: E95, E102, E97, E8
+M32. "CVE-2020-3118" (Software) — options: E95, E11, E97, E8
+M33. "CVE-2020-0611" (Software) — options: E90, E8, E88, E94
+M34. "CVE-2020-3259" (Software) — options: E5, E87, E8, E88
+M35. "CVE-2020-3741" (Software) — options: E17, E94, E103, E8
+M36. "CVE-2020-3254" (Software) — options: E5, E86, E8, E88
+M37. "CVE-2020-3187" (Software) — options: E95, E8, E96, E97
+M38. "CVE-2020-3298" (Software) — options: E91, E99, E86, E8
+M39. "CVE-2020-0609" (Software) — options: E8, E90, E100, E86
+M40. "CVE-2017-17688" (Software) — options: E104, E7, E105, E106
+M41. "CVE-2018-20251" (Software) — options: E110, E9, E6, E111
+M42. "CVE-2020-3757" (Software) — options: E103, E8, E20, E11
+M43. "CVE-2019-17666" (Software) — options: E15, E36, E104, E35
+M44. "CVE-2018-0958" (Software) — options: E6, E111, E9, E109
+M45. "CVE-2018-0854" (Software) — options: E14, E114, E9, E109
+M46. "CVE-2018-8141" (Software) — options: E121, E112, E6, E114
+M47. "CVE-2020-7047" (Software) — options: E19, E8, E116, E11
+M48. "CVE-2020-7048" (Software) — options: E18, E8, E36, E99
+M49. "CVE-2020-3759" (Software) — options: E86, E12, E8, E52
+M50. "CVE-2020-3760" (Software) — options: E103, E97, E8, E12
+M51. "POODLE (CVE-2014-3566)" (Software) — options: E7, E124, E113, E125
+M52. "CVE-2018-20250" (Software) — options: E110, E118, E6, E111
+M53. "CVE-2017-17689" (Software) — options: E15, E7, E52, E105
+M54. "CVE-2018-8897" (Software) — options: E122, E112, E6, E109
+M55. "CVE-2018-8127" (Software) — options: E114, E112, E6, E123
+M56. "CVE-2017-8759" (Software) — options: E103, E104, E7, E13
+M57. "CVE-2019-0708" (Software) — options: E19, E14, E107, E123
+M58. "CVE-2018-7602" (Software) — options: E117, E6, E120, E9
+M59. "CVE-2018-7600" (Software) — options: E115, E6, E119, E112
+M60. "CVE-2018-20252" (Software) — options: E111, E9, E6, E118
+M61. "CVE-2018-20253" (Software) — options: E110, E9, E6, E118
+M62. "Microsoft Exchange Server" (Software) — options: E28, E31, E24, E22
+M63. "Cisco Firepower Threat Defense (FTD) Software" (Software) — options: E129, E130, E131, E132
+M64. "dnsmasq" (Software) — options: E136, E84, E56, E58
+M65. "curl.exe" (Software) — options: E64, E48, E139, E140
+M66. "spi.exe" (Software) — options: E64, E143, E140, E139
+M67. "nginx" (Software) — options: E58, E147, E57, E69
+M68. "Windows" (Software) — options: E150, E151, E152, E28
+M69. "Qualys SSL Client Test" (Software) — options: E155, E156, E47, E157
+M70. "installer.exe" (Software) — options: E142, E139, E162, E64
+M71. "TeamViewer" (Software) — options: E164, E73, E135, E28
+M72. "WinSCP" (Software) — options: E70, E169, E170, E150
+M73. "Mozilla" (Software) — options: E28, E171, E172, E73
+M74. "WS_FTP" (Software) — options: E56, E178, E179, E180
+M75. "vaultcli.dll" (Software) — options: E155, E183, E82, E64
+M76. "Linux" (Software) — options: E58, E155, E146, E186
+M77. "Iclouding.exe" (Software) — options: E187, E139, E185, E141
+M78. "OpenPGP" (Software) — options: E166, E155, E190, E73
+M79. "macOS" (Software) — options: E191, E164, E137, E194
+M80. "Apache" (Software) — options: E58, E132, E197, E73
+M81. "Joomla" (Software) — options: E58, E200, E201, E28
+M82. "OpenIOC" (Software) — options: E155, E166, E85, E203
+M83. "Hashcat" (Software) — options: E58, E76, E68, E206
+M84. "CMS Drupal" (Software) — options: E208, E209, E196, E58
+M85. "WordPress" (Software) — options: E191, E155, E213, E70
+M86. "Tor" (Software) — options: E215, E58, E164, E28
+M87. "FTP Commander" (Software) — options: E70, E180, E56, E202
+M88. "STIX" (Software) — options: E155, E48, E75, E28
+M89. "OpenSSL" (Software) — options: E166, E190, E73, E85
+M90. "Snort" (Software) — options: E76, E223, E81, E58
+M91. "Chromium Browser" (Software) — options: E225, E226, E161, E227
+M92. "ClamAV" (Software) — options: E185, E138, E58, E211
+M93. "SmartFTP" (Software) — options: E70, E216, E178, E180
+M94. "icloud.cmd" (Software) — options: E188, E187, E178, E140
+M95. "Zoom" (Software) — options: E76, E28, E235, E58
+M96. "VPNFilter" (Software) — options: E166, E180, E155, E238
+M97. "iclouds.cmd" (Software) — options: E185, E140, E178, E187
+M98. "OpenVPN" (Software) — options: E155, E190, E73, E85
+M99. "DAAL" (Software) — options: E184, E241, E221, E242
+M100. "FTPGetter" (Software) — options: E178, E70, E243, E244
+M101. "Mimikatz" (Software) — options: E76, E68, E222, E184
+M102. "WinRAR" (Software) — options: E28, E169, E248, E58
+M103. "Adobe Experience Manager" (Software) — options: E28, E58, E218, E249
+M104. "НПУ.docx" (Software) — options: E184, E252, E253, E254
+M105. "Cisco IOS" (Software) — options: E128, E134, E155, E256
+M106. "inf.zip" (Software) — options: E258, E28, E252, E259
+M107. "XTBL" (Software) — options: E155, E221, E220, E124
+M108. "VMware ESXi" (Software) — options: E128, E194, E74, E231
+M109. "S/MIME" (Software) — options: E202, E143, E229, E220
+M110. "Remote Utilities" (Software) — options: E76, E42, E28, E251
+M111. "Trillian" (Software) — options: E155, E58, E264, E16
+M112. "Filezilla" (Software) — options: E58, E56, E183, E171
+M113. "Adobe Acrobat Reader" (Software) — options: E249, E251, E218, E28
+M114. "jDownloader" (Software) — options: E58, E268, E180, E269
+M115. "Zimbra" (Software) — options: E76, E39, E230, E58
+M116. "EFAIL" (Software) — options: E184, E28, E220, E137
+M117. "Foxmail" (Software) — options: E202, E137, E205, E138
+M118. "MS Office" (Software) — options: E199, E209, E34, E28
+M119. "IcloudSecurity.lnk" (Software) — options: E185, E232, E188, E194
+M120. "crsse.exe" (Software) — options: E64, E139, E145, E45
+M121. "sysm.exe" (Software) — options: E145, E64, E139, E48
+M122. "VMware Fusion" (Software) — options: E262, E58, E271, E150
+M123. "DigiCert Certificate Inspector" (Software) — options: E28, E63, E272, E155
+M124. "Icloud.exe" (Software) — options: E185, E232, E139, E189
+M125. "Chipset Device Software" (Software) — options: E132, E29, E51, E129
+M126. "FireEye red team tools" (Software) — options: E28, E266, E231, E178
+M127. "YARA" (Software) — options: E28, E59, E246, E76
+M128. "Adobe Flash Player" (Software) — options: E28, E218, E38, E58
+M129. "Adobe Illustrator CC" (Software) — options: E275, E249, E218, E28
+M130. "CyBOX" (Software) — options: E265, E229, E204, E78
+M131. "SolarWinds Orion" (Software) — options: E77, E138, E170, E73
+M132. "Ursnif" (Software) — options: E76, E264, E158, E148
+M133. "Paltalk" (Software) — options: E76, E211, E241, E202
+M134. "SMB протокол" (Software) — options: E150, E241, E223, E56
+M135. "Pterodo" (Software) — options: E279, E234, E280, E197
+M136. "Заявка.js" (Software) — options: E149, E260, E281, E282
+M137. "Petya" (Software) — options: E184, E285, E76, E286
+M138. "./decpded_page.html" (Software) — options: E58, E60, E83, E234
+M139. "Gozi" (Software) — options: E76, E58, E191, E258
+M140. "AZORult" (Software) — options: E58, E216, E277, E28
+M141. "Sonoko" (Software) — options: E76, E184, E216, E288
+M142. "ckZ89.ExE" (Software) — options: E128, E140, E139, E28
+M143. "HXIOC" (Software) — options: E128, E190, E155, E65
+M144. "info.zip" (Software) — options: E287, E260, E176, E259
+M145. "GreyEnergy" (Software) — options: E291, E76, E85, E37
+M146. "Adobe Framemaker" (Software) — options: E28, E206, E250, E58
+
+=== RESPONSE (72.4s, in 10039 / out 12053 tok, stop) ===
+```json
+{"v":[{"m":"CVE-2021-26855","id":"E10","g":null,"p":null,"r":null},{"m":"CVE-2021-26857","id":"E2","g":null,"p":null,"r":null},{"m":"CVE-2021-26858","id":"E3","g":null,"p":null,"r":null},{"m":"CVE-2021-27065","id":"E4","g":null,"p":null,"r":null},{"m":"Microsoft Exchange Server 2010","id":"E31","g":null,"p":null,"r":null},{"m":"Microsoft Exchange Server 2013","id":"E22","g":null,"p":null,"r":null},{"m":"Microsoft Exchange Server 2016","id":"E24","g":null,"p":null,"r":null},{"m":"Microsoft Exchange Server 2019","id":"E25","g":null,"p":null,"r":null},{"m":"Exchange On-premises Mitigation Tool (EOMT)","id":"NEW","g":"mitigation tool for Microsoft Exchange Server","p":"E23","r":"n"},{"m":"Test-ProxyLogon.ps1","id":"E160","g":null,"p":null,"r":null},{"m":"http-vuln-cve2021-26855.nse","id":"E1","g":null,"p":null,"r":null},{"m":"nmap","id":"E84","g":null,"p":null,"r":null},{"m":"Microsoft Safety Scanner","id":"E37","g":null,"p":null,"r":null},{"m":"IIS","id":"NEW","g":"Internet Information Services","p":"E170","r":"p"},{"m":"Burp Suite","id":"E158","g":null,"p":null,"r":null},{"m":"python-requests","id":"NEW","g":"HTTP library for Python","p":null,"r":null},{"m":"Zenmap","id":"E54","g":null,"p":null,"r":null},{"m":"CVE-2020-3255","id":"E5","g":null,"p":null,"r":null},{"m":"CVE-2020-3191","id":"E98","g":null,"p":null,"r":null},{"m":"CVE-2020-3195","id":"E92","g":null,"p":null,"r":null},{"m":"CVE-2020-3119","id":"E102","g":null,"p":null,"r":null},{"m":"CVE-2020-0601","id":"E8","g":null,"p":null,"r":null},{"m":"CVE-2020-3110","id":"E97","g":null,"p":null,"r":null},{"m":"CVE-2020-3125","id":"E20","g":null,"p":null,"r":null},{"m":"CVE-2020-3111","id":"E94","g":null,"p":null,"r":null},{"m":"CVE-2020-0610","id":"E90","g":null,"p":null,"r":null},{"m":"CVE-2020-3283","id":"E91","g":null,"p":null,"r":null},{"m":"CVE-2020-3196","id":"E93","g":null,"p":null,"r":null},{"m":"CVE-2020-3189","id":"E95","g":null,"p":null,"r":null},{"m":"CVE-2020-3120","id":"E101","g":null,"p":null,"r":null},{"m":"CVE-2020-3179","id":"E96","g":null,"p":null,"r":null},{"m":"CVE-2020-3118","id":"E99","g":null,"p":null,"r":null},{"m":"CVE-2020-0611","id":"E100","g":null,"p":null,"r":null},{"m":"CVE-2020-3259","id":"E86","g":null,"p":null,"r":null},{"m":"CVE-2020-3741","id":"E116","g":null,"p":null,"r":null},{"m":"CVE-2020-3254","id":"E87","g":null,"p":null,"r":null},{"m":"CVE-2020-3187","id":"E11","g":null,"p":null,"r":null},{"m":"CVE-2020-3298","id":"E89","g":null,"p":null,"r":null},{"m":"CVE-2020-0609","id":"E88","g":null,"p":null,"r":null},{"m":"CVE-2017-17688","id":"E15","g":null,"p":null,"r":null},{"m":"CVE-2018-20251","id":"E118","g":null,"p":null,"r":null},{"m":"CVE-2020-3757","id":"E12","g":null,"p":null,"r":null},{"m":"CVE-2019-17666","id":"E107","g":null,"p":null,"r":null},{"m":"CVE-2018-0958","id":"E14","g":null,"p":null,"r":null},{"m":"CVE-2018-0854","id":"E6","g":null,"p":null,"r":null},{"m":"CVE-2018-8141","id":"E113","g":null,"p":null,"r":null},{"m":"CVE-2020-7047","id":"E18","g":null,"p":null,"r":null},{"m":"CVE-2020-7048","id":"E19","g":null,"p":null,"r":null},{"m":"CVE-2020-3759","id":"E103","g":null,"p":null,"r":null},{"m":"CVE-2020-3760","id":"E17","g":null,"p":null,"r":null},{"m":"POODLE (CVE-2014-3566)","id":"NEW","g":"SSLv3 vulnerability","p":null,"r":null},{"m":"CVE-2018-20250","id":"E9","g":null,"p":null,"r":null},{"m":"CVE-2017-17689","id":"E104","g":null,"p":null,"r":null},{"m":"CVE-2018-8897","id":"E108","g":null,"p":null,"r":null},{"m":"CVE-2018-8127","id":"E122","g":null,"p":null,"r":null},{"m":"CVE-2017-8759","id":"E52","g":null,"p":null,"r":null},{"m":"CVE-2019-0708","id":"E36","g":null,"p":null,"r":null},{"m":"CVE-2018-7602","id":"E115","g":null,"p":null,"r":null},{"m":"CVE-2018-7600","id":"E117","g":null,"p":null,"r":null},{"m":"CVE-2018-20252","id":"E110","g":null,"p":null,"r":null},{"m":"CVE-2018-20253","id":"E111","g":null,"p":null,"r":null},{"m":"Microsoft Exchange Server","id":"E23","g":null,"p":null,"r":null},{"m":"Cisco Firepower Threat Defense (FTD) Software","id":"E51","g":null,"p":null,"r":null},{"m":"dnsmasq","id":"E43","g":null,"p":null,"r":null},{"m":"curl.exe","id":"NEW","g":"command line tool for transferring data","p":null,"r":null},{"m":"spi.exe","id":"E48","g":null,"p":null,"r":null},{"m":"nginx","id":"E67","g":null,"p":null,"r":null},{"m":"Windows","id":"E170","g":null,"p":null,"r":null},{"m":"Qualys SSL Client Test","id":"E44","g":null,"p":null,"r":null},{"m":"installer.exe","id":"E278","g":null,"p":null,"r":null},{"m":"TeamViewer","id":"E238","g":null,"p":null,"r":null},{"m":"WinSCP","id":"E179","g":null,"p":null,"r":null},{"m":"Mozilla","id":"E58","g":null,"p":null,"r":null},{"m":"WS_FTP","id":"E70","g":null,"p":null,"r":null},{"m":"vaultcli.dll","id":"E277","g":null,"p":null,"r":null},{"m":"Linux","id":"E147","g":null,"p":null,"r":null},{"m":"Iclouding.exe","id":"E232","g":null,"p":null,"r":null},{"m":"OpenPGP","id":"E85","g":null,"p":null,"r":null},{"m":"macOS","id":"NEW","g":"Apple operating system for Macs","p":null,"r":null},{"m":"Apache","id":"E69","g":null,"p":null,"r":null},{"m":"Joomla","id":"E235","g":null,"p":null,"r":null},{"m":"OpenIOC","id":"E190","g":null,"p":null,"r":null},{"m":"Hashcat","id":"E290","g":null,"p":null,"r":null},{"m":"CMS Drupal","id":"E241","g":null,"p":null,"r":null},{"m":"WordPress","id":"E80","g":null,"p":null,"r":null},{"m":"Tor","id":"E272","g":null,"p":null,"r":null},{"m":"FTP Commander","id":"E178","g":null,"p":null,"r":null},{"m":"STIX","id":"E148","g":null,"p":null,"r":null},{"m":"OpenSSL","id":"E155","g":null,"p":null,"r":null},{"m":"Snort","id":"E216","g":null,"p":null,"r":null},{"m":"Chromium Browser","id":"E174","g":null,"p":null,"r":null},{"m":"ClamAV","id":"E59","g":null,"p":null,"r":null},{"m":"SmartFTP","id":"E56","g":null,"p":null,"r":null},{"m":"icloud.cmd","id":"E185","g":null,"p":null,"r":null},{"m":"Zoom","id":"E201","g":null,"p":null,"r":null},{"m":"VPNFilter","id":"E244","g":null,"p":null,"r":null},{"m":"iclouds.cmd","id":"E188","g":null,"p":null,"r":null},{"m":"OpenVPN","id":"E166","g":null,"p":null,"r":null},{"m":"DAAL","id":"E211","g":null,"p":null,"r":null},{"m":"FTPGetter","id":"E180","g":null,"p":null,"r":null},{"m":"Mimikatz","id":"E39","g":null,"p":null,"r":null},{"m":"WinRAR","id":"E153","g":null,"p":null,"r":null},{"m":"Adobe Experience Manager","id":"E267","g":null,"p":null,"r":null},{"m":"НПУ.docx","id":"E204","g":null,"p":null,"r":null},{"m":"Cisco IOS","id":"E194","g":null,"p":null,"r":null},{"m":"inf.zip","id":"E287","g":null,"p":null,"r":null},{"m":"XTBL","id":"NEW","g":"software entity","p":null,"r":null},{"m":"VMware ESXi","id":"E271","g":null,"p":null,"r":null},{"m":"S/MIME","id":"E222","g":null,"p":null,"r":null},{"m":"Remote Utilities","id":"NEW","g":"remote administration software suite","p":"E42","r":"b"},{"m":"Trillian","id":"E221","g":null,"p":null,"r":null},{"m":"Filezilla","id":"E172","g":null,"p":null,"r":null},{"m":"Adobe Acrobat Reader","id":"E250","g":null,"p":null,"r":null},{"m":"jDownloader","id":"E200","g":null,"p":null,"r":null},{"m":"Zimbra","id":"E246","g":null,"p":null,"r":null},{"m":"EFAIL","id":"E242","g":null,"p":null,"r":null},{"m":"Foxmail","id":"E220","g":null,"p":null,"r":null},{"m":"MS Office","id":"E61","g":null,"p":null,"r":null},{"m":"IcloudSecurity.lnk","id":"E189","g":null,"p":null,"r":null},{"m":"crsse.exe","id":"E142","g":null,"p":null,"r":null},{"m":"sysm.exe","id":"E143","g":null,"p":null,"r":null},{"m":"VMware Fusion","id":"E74","g":null,"p":null,"r":null},{"m":"DigiCert Certificate Inspector","id":"E224","g":null,"p":null,"r":null},{"m":"Icloud.exe","id":"E187","g":null,"p":null,"r":null},{"m":"Chipset Device Software","id":"E131","g":null,"p":null,"r":null},{"m":"FireEye red team tools","id":"E135","g":null,"p":null,"r":null},{"m":"YARA","id":"E230","g":null,"p":null,"r":null},{"m":"Adobe Flash Player","id":"E206","g":null,"p":null,"r":null},{"m":"Adobe Illustrator CC","id":"E217","g":null,"p":null,"r":null},{"m":"CyBOX","id":"E253","g":null,"p":null,"r":null},{"m":"SolarWinds Orion","id":"E289","g":null,"p":null,"r":null},{"m":"Ursnif","id":"E71","g":null,"p":null,"r":null},{"m":"Paltalk","id":"E184","g":null,"p":null,"r":null},{"m":"SMB протокол","id":"E212","g":null,"p":null,"r":null},{"m":"Pterodo","id":"E245","g":null,"p":null,"r":null},{"m":"Заявка.js","id":"E247","g":null,"p":null,"r":null},{"m":"Petya","id":"E243","g":null,"p":null,"r":null},{"m":"./decpded_page.html","id":"E57","g":null,"p":null,"r":null},{"m":"Gozi","id":"E176","g":null,"p":null,"r":null},{"m":"AZORult","id":"E82","g":null,"p":null,"r":null},{"m":"Sonoko","id":"E223","g":null,"p":null,"r":null},{"m":"ckZ89.ExE","id":"E45","g":null,"p":null,"r":null},{"m":"HXIOC","id":"E203","g":null,"p":null,"r":null},{"m":"info.zip","id":"E258","g":null,"p":null,"r":null},{"m":"GreyEnergy","id":"E192","g":null,"p":null,"r":null},{"m":"Adobe Framemaker","id":"E218","g":null,"p":null,"r":null}]}
+```

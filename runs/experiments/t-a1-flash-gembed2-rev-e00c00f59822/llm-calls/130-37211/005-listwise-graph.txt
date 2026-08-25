@@ -1,0 +1,120 @@
+=== REQUEST (gemini gemini-3.7-flash) ===
+--- sampling ---
+{"temperature":0}
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 47 canonicals"
+Entities:
+E1. Державний центр кіберзахисту
+E2. Оперативне командування "Південь"
+E3. Національний координаційний центр кібербезпеки РНБО України (НКЦК)
+E4. Центр кібербезпеки ІТС
+E5. ДЦКЗ Держспецзв'язку
+E6. Центр кібербезпеки ЗСУ (ЦКБ)
+E7. Адміністрація Держспецзв'язку
+E8. Спеціалізованої прокуратури у військовій та оборонній сфері
+E9. Державна податкова служба України
+E10. Оперативний центр реагування на кіберінциденти
+E11. ДСНС України [aka Державна служба України з надзвичайних ситуацій]
+E12. Держспецзв'язку
+E13. Центр інновацій та розвитку оборонних технологій Міністерства оборони України
+E14. Міністерство освіти та науки України
+E15. Сили оборони України
+E16. Апарату Ради національної безпеки і оборони України
+E17. Federal Security Service of Russia (FSB) [aka FSB of Russia]
+E18. Міністерство оборони України
+E19. Служба безпеки України [aka СБУ, Security Service of Ukraine (SBU), СБ України, Служба безпеки України (СБУ)]
+E20. НБУ [aka Національного банку України, Національний банк України, Національний банк України (НБУ)]
+E21. Департаменту кіберполіції Національної поліції України
+E22. Національна поліція України
+E23. Збройні сили України [aka ЗСУ]
+E24. Міністерство оборони Киргизької Республіки
+E25. Пресслужба Генштабу ЗСУ
+E26. Міністерство оборони Республіки Вірменія
+E27. 3-тя окрема штурмова бригада
+E28. Міністерство юстиції України
+E29. Поліція Польщі
+E30. Міністерство закордонних справ України
+E31. Embassy of Tajikistan in Ukraine
+E32. ГУ СБУ в АР Крим
+E33. Господарський суд Одеської області
+E34. CSIRT-NBU [aka Національний банк України (CSIRT-NBU)]
+E35. Мінсоцполітики
+E36. Посольство Ісламської Республіки Іран в Тірані
+E37. MIL.CERT-UA
+E38. CSIRT MON
+E39. ГУ ГШ ЗС РФ
+E40. в/ч A0334 [aka Центр кібербезпеки ІТС (в/ч А0334), Центр кібернетичної безпеки інформаційно-телекомунікаційних систем військової частини А0334 (ЦКБ ІТС в/ч А0334)]
+E41. ISTAR ОУВ "Запоріжжя"
+E42. Security and Defense Forces of Ukraine
+Mentions:
+M1. "Оперативний центр реагування на кіберінциденти" (Government Body) — options: E1, E2, E3, E4
+M2. "Державний центр кіберзахисту" (Government Body) — options: E7, E10, E4, E5
+M3. "Спеціалізованої прокуратури у військовій та оборонній сфері" (Government Body) — options: E7, E13, E14, E15
+M4. "Апарату Ради національної безпеки і оборони України" (Government Body) — options: E3, E20, E21, E15
+M5. "Армія оборони Ізраїлю (ЦАХАЛ)" (Government Body) — options: E15, E18, E23, E24
+M6. "ДСНС України" (Government Body) — options: E15, E19, E18, E5
+M7. "Мінсоцполітики" (Government Body) — options: E14, E18, E15, E29
+M8. "Посольство Ісламської Республіки Іран в Тірані" (Government Body) — options: E31, E26, E24, E30
+M9. "Національна поліція України" (Government Body) — options: E20, E21, E29, E23
+M10. "Міністерство закордонних справ України" (Government Body) — options: E14, E18, E28, E20
+M11. "Міністерство освіти та науки України" (Government Body) — options: E30, E18, E28, E20
+M12. "Міністерство оборони Республіки Вірменія" (Government Body) — options: E18, E24, E15, E14
+M13. "Державна податкова служба України" (Government Body) — options: E20, E11, E14, E19
+M14. "Печерський районний суд міста Києва" (Government Body) — options: E28, E15, E33, E20
+M15. "Security and Defense Forces of Ukraine" (Government Body) — options: E23, E19, E17, E31
+M16. "Міністерство оборони Киргизької Республіки" (Government Body) — options: E26, E18, E15, E30
+M17. "Міністерство юстиції України" (Government Body) — options: E14, E18, E30, E20
+M18. "ГУ ГШ ЗС РФ" (Government Body) — options: E17, E32, E25, E19
+M19. "Federal Security Service of Russia (FSB)" (Government Body) — options: E19, E42, E39, E31
+
+=== RESPONSE (8.8s, in 2867 / out 541 tok, STOP) ===
+{"v":[{"m":"M1","id":"NEW","g":"cyber incident response center of State Cyber Protection Centre","p":"E1","r":"p"},{"m":"M2","id":"E5","g":null,"p":null,"r":null},{"m":"M3","id":"NEW","g":"specialized prosecution service for military and defense sector","p":null,"r":null},{"m":"M4","id":"NEW","g":"staff of National Security and Defense Council of Ukraine","p":null,"r":null},{"m":"M5","id":"NEW","g":"military forces of the State of Israel","p":null,"r":null},{"m":"M6","id":"NEW","g":"state emergency and civil protection service of Ukraine","p":null,"r":null},{"m":"M7","id":"NEW","g":"central executive body for social policy in Ukraine","p":null,"r":null},{"m":"M8","id":"NEW","g":"diplomatic mission of Iran in Tirana, Albania","p":null,"r":null},{"m":"M9","id":"NEW","g":"national police force of Ukraine","p":"E21","r":"b"},{"m":"M10","id":"NEW","g":"government ministry overseeing foreign relations of Ukraine","p":null,"r":null},{"m":"M11","id":"NEW","g":"ministry managing state education and scientific research in Ukraine","p":null,"r":null},{"m":"M12","id":"NEW","g":"government department in charge of the Armenian military","p":null,"r":null},{"m":"M13","id":"NEW","g":"central government agency administering taxation in Ukraine","p":null,"r":null},{"m":"M14","id":"NEW","g":"district court of general jurisdiction in Kyiv","p":null,"r":null},{"m":"M15","id":"NEW","g":"collective security and defense forces of Ukraine","p":null,"r":null},{"m":"M16","id":"NEW","g":"government ministry managing armed forces of Kyrgyzstan","p":null,"r":null},{"m":"M17","id":"NEW","g":"government ministry overseeing the legal system in Ukraine","p":null,"r":null},{"m":"M18","id":"NEW","g":"foreign military intelligence agency of the Russian Armed Forces","p":null,"r":null},{"m":"M19","id":"NEW","g":"principal domestic security and intelligence service of Russia","p":null,"r":null}]}

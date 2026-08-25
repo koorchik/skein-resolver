@@ -1,0 +1,267 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 340 canonicals"
+Entities:
+E1. CVE-2020-3196
+E2. CVE-2020-3110
+E3. CVE-2018-20250
+E4. CVE-2017-0144
+E5. CVE-2020-3191
+E6. CVE-2020-3120
+E7. CVE-2018-20251
+E8. CVE-2017-0199
+E9. CVE-2019-0708
+E10. IIS [aka IIS (Internet Information Services)]
+E11. Processor Graphics
+E12. Газпромбанк заказ.js
+E13. Remote Desktop Protocol (RDP)
+E14. Cisco Discovery Protocol (CDP)
+E15. Apache
+E16. nginx
+E17. SMB протокол
+E18. http-vuln-cve2021-26855.nse
+E19. Windows 10
+E20. Windows Server 2008
+E21. Windows [aka Microsoft Windows]
+E22. Windows SMBv1
+E23. Windows Server 2019
+E24. Windows 7
+E25. Windows Server 2012
+E26. Windows Server 2016
+E27. CVE-2020-3111
+E28. CVE-2020-3195
+E29. CVE-2020-0601
+E30. CVE-2020-3189
+E31. CVE-2020-0609
+E32. CVE-2020-3179
+E33. CVE-2020-0610
+E34. CVE-2020-3118
+E35. CVE-2017-14491
+E36. CVE-2017-8759
+E37. CVE-2017-11882
+E38. CVE-2019-17666
+E39. CVE-2018-8129
+E40. CVE-2017-17689
+E41. CVE-2017-17688
+E42. CVE-2020-3125
+E43. CVE-2020-3187
+E44. CVE-2020-3119
+E45. CVE-2020-7048
+E46. CVE-2018-0958
+E47. CVE-2020-7047
+E48. CVE-2020-3741
+E49. CVE-2020-3757
+E50. CVE-2021-26855
+E51. CVE-2021-26858
+E52. CVE-2021-26857
+E53. CVE-2020-3760
+E54. CVE-2021-32648
+E55. CVE-2021-27065
+E56. CVE-2020-3255
+E57. CVE-2018-0854
+E58. CVE-2020-0611
+E59. CVE-2018-8127
+E60. CVE-2018-8120
+E61. CVE-2018-8170
+E62. CVE-2018-8124
+E63. CVE-2018-8141
+E64. CVE-2020-3259
+E65. CVE-2020-3283
+E66. CVE-2020-3254
+E67. CVE-2020-3298
+E68. Troldesh/Shade [aka Troldesh, Shade, Trojan.Encoder.858]
+E69. CVE-2020-3759
+E70. CVE-2018-7600
+E71. Microsoft Exchange Server 2019
+E72. CVE-2018-7602
+E73. HTTP Protocol Stack (http.sys)
+E74. Mozilla
+E75. Linux
+E76. ./decpded_page.html
+E77. STIX
+E78. ./перевірити діяльність.html
+E79. dnsmasq
+E80. WinExe
+E81. ./рахунки ООО Спецстрой.xls.js
+E82. CMS Drupal
+E83. Sonoko
+E84. SmartFTP
+E85. MS Excel
+E86. Лица, которые переместились из АР Крым и районов проведения антитерротистической операции.com
+E87. OpenSSL
+E88. MS Office [aka Microsoft Office]
+E89. WS_FTP
+E90. RegAsm.exe
+E91. csrss.exe
+E92. 223329.exe
+E93. spi.exe
+E94. 62ea.exe
+E95. explorer.exe
+E96. cmd.exe
+E97. 966449.exe
+E98. crsse.exe
+E99. ChakraCore
+E100. Chedot Browser
+E101. Opera Browser
+E102. Propagate
+E103. Apple Mail
+E104. Microsoft Office Services and Web Apps
+E105. OpenVPN
+E106. OpenIOC
+E107. OpenPGP [aka PGP]
+E108. Cisco IOS
+E109. Opera Mail
+E110. SSL 3.0
+E111. Cisco IOS XE
+E112. FTP Commander
+E113. WinSCP
+E114. FTPGetter
+E115. ssj.jpg
+E116. host_news_mod_mod.msi
+E117. Filezilla
+E118. VBScript
+E119. SNMP Subagent Stand-Alone for Windows
+E120. Internet Explorer
+E121. Trillian
+E122. S/MIME
+E123. nslookup
+E124. nmap
+E125. iOS Mail
+E126. Claws Mail
+E127. Postbox Credential
+E128. Elements Browser
+E129. WordPress
+E130. needrestart
+E131. AZORult
+E132. Microsoft Equation Editor
+E133. Liebao Browser
+E134. tvOS
+E135. Win32k
+E136. Microsoft Exchange Server 2010
+E137. Microsoft Exchange Server 2016
+E138. Microsoft Exchange Server 2013
+E139. Microsoft SQL Server (MSSQL)
+E140. Microsoft Edge
+E141. Microsoft Windows Server 2003
+E142. WinRAR
+E143. Windows Vista
+E144. sysm.exe
+E145. Cisco FXOS
+E146. Cisco IOS XR
+E147. iOS
+E148. Cisco NX-OS
+E149. Safari
+E150. Misha
+E151. Adobe Flash Player
+E152. killself.bat
+E153. Firefox [aka Mozilla Firefox]
+E154. Thunderbird [aka Mozilla Thunderbird]
+E155. Chromium Browser
+E156. Brave Browser
+E157. Gozi
+E158. Amigo Browser
+E159. Microsoft Exchange Server
+Mentions:
+M1. "CVE-2022-21907" (Software) — options: E1, E2, E3, E4
+M2. "HTTP Protocol Stack (http.sys)" (Software) — options: E10, E11, E12, E13
+M3. "Windows 10 version 1809" (Software) — options: E19, E9, E20, E21
+M4. "CVE-2020-3191" (Software) — options: E1, E27, E28, E29
+M5. "CVE-2020-3196" (Software) — options: E30, E5, E29, E28
+M6. "CVE-2020-3119" (Software) — options: E1, E30, E2, E29
+M7. "CVE-2017-0199" (Software) — options: E4, E35, E36, E37
+M8. "CVE-2020-3195" (Software) — options: E1, E30, E42, E5
+M9. "CVE-2020-3189" (Software) — options: E43, E44, E29, E1
+M10. "CVE-2019-0708" (Software) — options: E45, E46, E38, E39
+M11. "CVE-2020-7047" (Software) — options: E45, E29, E48, E43
+M12. "CVE-2020-3187" (Software) — options: E30, E29, E32, E2
+M13. "CVE-2021-27065" (Software) — options: E50, E51, E52, E53
+M14. "CVE-2020-3179" (Software) — options: E30, E44, E2, E29
+M15. "CVE-2021-26857" (Software) — options: E51, E50, E18, E43
+M16. "CVE-2021-26855" (Software) — options: E18, E52, E51, E55
+M17. "CVE-2020-0610" (Software) — options: E29, E58, E31, E6
+M18. "CVE-2020-3110" (Software) — options: E27, E34, E29, E6
+M19. "CVE-2020-3120" (Software) — options: E42, E2, E29, E1
+M20. "CVE-2018-8897" (Software) — options: E59, E60, E57, E61
+M21. "CVE-2020-0609" (Software) — options: E29, E33, E58, E64
+M22. "CVE-2021-32648" (Software) — options: E65, E66, E51, E50
+M23. "CVE-2020-0601" (Software) — options: E31, E33, E58, E42
+M24. "CVE-2021-26858" (Software) — options: E50, E52, E18, E54
+M25. "CVE-2020-3118" (Software) — options: E30, E43, E2, E29
+M26. "CVE-2020-3757" (Software) — options: E69, E29, E42, E43
+M27. "CVE-2020-7048" (Software) — options: E47, E29, E9, E34
+M28. "CVE-2020-3111" (Software) — options: E2, E29, E42, E34
+M29. "CVE-2020-3255" (Software) — options: E64, E66, E29, E42
+M30. "CVE-2020-3125" (Software) — options: E1, E6, E29, E28
+M31. "CVE-2019-17666" (Software) — options: E41, E9, E40, E23
+M32. "http-vuln-cve2021-26855.nse" (Software) — options: E50, E51, E52, E73
+M33. "CVE-2020-3298" (Software) — options: E65, E34, E64, E29
+M34. "CVE-2020-0611" (Software) — options: E33, E29, E31, E27
+M35. "nginx" (Software) — options: E74, E75, E76, E15
+M36. "SMB протокол" (Software) — options: E22, E82, E83, E84
+M37. "sysm.exe" (Software) — options: E90, E91, E92, E93
+M38. "Apache" (Software) — options: E74, E99, E100, E101
+M39. "OpenSSL" (Software) — options: E105, E106, E101, E107
+M40. "WS_FTP" (Software) — options: E84, E112, E113, E114
+M41. "STIX" (Software) — options: E87, E93, E119, E120
+M42. "dnsmasq" (Software) — options: E123, E124, E84, E74
+M43. "python-requests" (Software) — options: E74, E127, E128, E120
+M44. "Linux" (Software) — options: E74, E87, E80, E133
+M45. "Microsoft Exchange Server" (Software) — options: E120, E136, E137, E138
+M46. "Windows" (Software) — options: E22, E24, E19, E120
+M47. "spi.exe" (Software) — options: E91, E144, E96, E92
+M48. "Cisco IOS" (Software) — options: E111, E145, E87, E146
+M49. "Hashcat" (Software) — options: E74, E149, E150, E151
+M50. "Mozilla" (Software) — options: E120, E153, E117, E101
+M51. "Microsoft Exchange Server 2019" (Software) — options: E23, E136, E159, E137
+
+=== RESPONSE (70.3s, in 5206 / out 9928 tok, stop) ===
+{"v":[{"m":"CVE-2022-21907","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"HTTP Protocol Stack (http.sys)","id":"NEW","g":"Windows HTTP protocol stack","p":null,"r":null},{"m":"Windows 10 version 1809","id":"NEW","g":"a version of Windows 10","p":"E19","r":"v"},{"m":"CVE-2020-3191","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3196","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3119","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2017-0199","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3195","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3189","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2019-0708","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-7047","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3187","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2021-27065","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3179","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2021-26857","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2021-26855","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-0610","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3110","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3120","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2018-8897","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-0609","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2021-32648","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-0601","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2021-26858","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3118","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3757","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-7048","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3111","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3255","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-3125","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2019-17666","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"http-vuln-cve2021-26855.nse","id":"NEW","g":"Nmap script targeting CVE-2021-26855","p":"E50","r":"n"},{"m":"CVE-2020-3298","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"CVE-2020-0611","id":"NEW","g":"a security vulnerability","p":null,"r":null},{"m":"nginx","id":"NEW","g":"a web server","p":null,"r":null},{"m":"SMB протокол","id":"NEW","g":"server message block protocol","p":null,"r":null},{"m":"sysm.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"Apache","id":"NEW","g":"a web server","p":null,"r":null},{"m":"OpenSSL","id":"NEW","g":"a cryptography library","p":null,"r":null},{"m":"WS_FTP","id":"NEW","g":"an FTP client","p":null,"r":null},{"m":"STIX","id":"NEW","g":"structured threat information expression","p":null,"r":null},{"m":"dnsmasq","id":"NEW","g":"a lightweight DNS forwarder","p":null,"r":null},{"m":"python-requests","id":"NEW","g":"a Python HTTP library","p":null,"r":null},{"m":"Linux","id":"NEW","g":"an open-source operating system","p":null,"r":null},{"m":"Microsoft Exchange Server","id":"NEW","g":"an email server product","p":null,"r":null},{"m":"Windows","id":"NEW","g":"a Microsoft operating system","p":null,"r":null},{"m":"spi.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"Cisco IOS","id":"NEW","g":"a Cisco operating system","p":null,"r":null},{"m":"Hashcat","id":"NEW","g":"a password recovery tool","p":null,"r":null},{"m":"Mozilla","id":"NEW","g":"a web browser developer","p":null,"r":null},{"m":"Microsoft Exchange Server 2019","id":"NEW","g":"a version of Microsoft Exchange Server","p":"E159","r":"v"}]}

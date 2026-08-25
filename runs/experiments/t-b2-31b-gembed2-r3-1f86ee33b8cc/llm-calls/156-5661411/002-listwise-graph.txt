@@ -1,0 +1,198 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 636 canonicals"
+Entities:
+E1. CVE-2020-3283
+E2. CVE-2022-23131
+E3. pax_2023_ab1058..js
+E4. CVE-2018-8170
+E5. CVE-2020-3111
+E6. CVE-2018-20250 [aka CVE-2018-20251]
+E7. CVE-2017-0199 [aka CVE-2017-0144]
+E8. CVE-2018-8132
+E9. CVE-2020-3187
+E10. shellcode.x86 (Cobalt Strike Beacon) [aka shellcode.x86.bin]
+E11. shellcode.x64 (Cobalt Strike Beacon) [aka shellcode.x64.bin]
+E12. one.exe
+E13. BitsTransfer
+E14. Racoon
+E15. AsyncRAT
+E16. Cuba Ransomware
+E17. ConfuserEx
+E18. SPECTR.Shell
+E19. QuickMute
+E20. GoDownloader
+E21. loader.exe
+E22. Propagate/Unwaders
+E23. GzipLoader
+E24. Smokeloader
+E25. jDownloader
+E26. LOADSHORT
+E27. MAGICSPELL
+E28. CVE-2020-3259
+E29. CVE-2018-0854
+E30. CVE-2018-20252
+E31. CVE-2018-0958 [aka CVE-2018-13379]
+E32. CVE-2020-3125
+E33. CVE-2018-20253
+E34. CVE-2018-8120
+E35. CVE-2018-6882
+E36. CVE-2018-7602
+E37. CVE-2018-8134
+E38. CVE-2021-34523
+E39. CVE-2021-26855
+E40. CVE-2020-3179
+E41. CVE-2021-31207
+E42. CVE-2021-26857
+E43. CVE-2021-32648
+E44. CVE-2021-34473
+E45. CVE-2021-44026
+E46. CVE-2018-8141
+E47. CVE-2021-44228
+E48. CVE-2017-8759
+E49. CVE-2020-7047
+E50. CVE-2020-3110
+E51. CVE-2022-21907
+E52. CVE-2020-3119
+E53. CVE-2022-23134
+E54. CVE-2018-8129
+E55. CVE-2020-3120
+E56. CVE-2020-3118
+E57. CVE-2020-3255
+E58. CVE-2020-0601
+E59. CVE-2020-3191
+E60. CVE-2020-0609
+E61. CVE-2017-11882
+E62. CVE-2017-17688
+E63. CVE-2017-14491
+E64. CVE-2017-17689
+E65. CVE-2018-8127
+E66. CVE-2021-40444
+E67. CVE-2020-3196
+E68. CVE-2018-8124
+E69. CVE-2020-3189
+E70. CVE-2020-3254
+E71. CVE-2020-3195
+E72. CVE-2019-0708
+E73. Microsoft Office 2019
+E74. CVE-2018-7600
+E75. CVE-2020-3757
+E76. CVE-2020-3741
+E77. CVE-2018-8174
+E78. CVE-2018-8136
+E79. CVE-2020-12641
+E80. CVE-2020-3759
+E81. CVE-2021-26858
+E82. CVE-2020-3760
+E83. CVE-2020-0610
+E84. CVE-2020-7048
+E85. CVE-2020-0611
+E86. CVE-2021-27065
+E87. http-vuln-cve2021-26855.nse
+E88. CVE-2020-35730
+Mentions:
+M1. "CVE-2023-38831" (Software) — options: E1, E2, E3, E4
+M2. "Cobalt Strike Beacon" (Software) — options: E10, E11, E12, E13
+M3. "PicassoLoader" (Software) — options: E19, E20, E21, E22
+M4. "CVE-2018-20250" (Software) — options: E28, E29, E30, E31
+M5. "CVE-2018-20252" (Software) — options: E29, E6, E31, E1
+M6. "CVE-2018-20253" (Software) — options: E29, E6, E31, E28
+M7. "CVE-2021-34473" (Software) — options: E37, E38, E39, E40
+M8. "CVE-2021-34523" (Software) — options: E44, E39, E37, E45
+M9. "CVE-2021-40444" (Software) — options: E48, E7, E45, E39
+M10. "CVE-2022-30190" (Software) — options: E48, E50, E51, E8
+M11. "CVE-2020-3298" (Software) — options: E1, E28, E56, E57
+M12. "CVE-2017-0199" (Software) — options: E48, E4, E61, E54
+M13. "CVE-2021-44026" (Software) — options: E1, E32, E47, E39
+M14. "CVE-2021-31207" (Software) — options: E38, E55, E39, E44
+M15. "CVE-2022-24521" (Software) — options: E68, E38, E53, E51
+M16. "CVE-2020-3283" (Software) — options: E40, E9, E57, E58
+M17. "CVE-2020-3191" (Software) — options: E40, E67, E5, E71
+M18. "CVE-2019-17666" (Software) — options: E1, E32, E62, E72
+M19. "CVE-2020-3759" (Software) — options: E28, E40, E75, E58
+M20. "CVE-2018-8170" (Software) — options: E37, E34, E77, E31
+M21. "CVE-2021-32648" (Software) — options: E1, E32, E79, E41
+M22. "CVE-2018-8132" (Software) — options: E78, E37, E31, E6
+M23. "CVE-2018-8120" (Software) — options: E68, E54, E31, E65
+M24. "CVE-2020-3741" (Software) — options: E40, E1, E5, E80
+M25. "CVE-2018-8134" (Software) — options: E78, E68, E31, E8
+M26. "CVE-2018-8129" (Software) — options: E65, E34, E31, E68
+M27. "CVE-2020-3195" (Software) — options: E67, E9, E32, E59
+M28. "CVE-2021-27065" (Software) — options: E65, E29, E39, E81
+M29. "CVE-2018-0854" (Software) — options: E37, E31, E68, E6
+M30. "CVE-2018-8174" (Software) — options: E4, E37, E68, E31
+M31. "CVE-2017-11882" (Software) — options: E48, E4, E62, E7
+M32. "CVE-2020-0611" (Software) — options: E4, E58, E83, E65
+M33. "CVE-2020-7048" (Software) — options: E1, E32, E49, E58
+M34. "CVE-2018-8141" (Software) — options: E37, E34, E31, E78
+M35. "CVE-2020-35730" (Software) — options: E32, E1, E82, E55
+M36. "CVE-2018-8136" (Software) — options: E37, E8, E31, E6
+M37. "CVE-2018-6882" (Software) — options: E29, E8, E61, E31
+M38. "CVE-2020-3757" (Software) — options: E1, E40, E80, E58
+M39. "CVE-2020-7047" (Software) — options: E1, E32, E84, E58
+M40. "CVE-2020-3125" (Software) — options: E40, E55, E58, E1
+M41. "CVE-2018-8127" (Software) — options: E54, E34, E31, E68
+M42. "CVE-2017-8759" (Software) — options: E4, E64, E80, E7
+M43. "CVE-2020-3196" (Software) — options: E9, E59, E58, E40
+M44. "CVE-2018-8124" (Software) — options: E65, E34, E31, E54
+M45. "CVE-2020-0610" (Software) — options: E29, E68, E85, E58
+M46. "CVE-2021-26855" (Software) — options: E81, E44, E42, E38
+M47. "CVE-2020-3760" (Software) — options: E40, E1, E88, E80
+M48. "CVE-2021-26858" (Software) — options: E38, E39, E44, E42
+M49. "CVE-2020-3118" (Software) — options: E40, E32, E50, E58
+M50. "CVE-2020-3120" (Software) — options: E32, E40, E50, E58
+M51. "CVE-2020-3259" (Software) — options: E57, E70, E58, E1
+M52. "CVE-2020-0609" (Software) — options: E28, E57, E58, E32
+M53. "CVE-2020-3111" (Software) — options: E40, E32, E50, E58
+
+=== RESPONSE (31.4s, in 4823 / out 6533 tok, stop) ===
+{"v":[{"m":"CVE-2023-38831","id":"NEW","g":"a vulnerability in WinRAR","p":null,"r":null},{"m":"Cobalt Strike Beacon","id":"NEW","g":"a post-exploitation tool","p":"E10","r":"b"},{"m":"PicassoLoader","id":"NEW","g":"a malware loader","p":null,"r":null},{"m":"CVE-2018-20250","id":"E6","g":null,"p":null,"r":null},{"m":"CVE-2018-20252","id":"E30","g":null,"p":null,"r":null},{"m":"CVE-2018-20253","id":"E33","g":null,"p":null,"r":null},{"m":"CVE-2021-34473","id":"E44","g":null,"p":null,"r":null},{"m":"CVE-2021-34523","id":"E38","g":null,"p":null,"r":null},{"m":"CVE-2021-40444","id":"E66","g":null,"p":null,"r":null},{"m":"CVE-2022-30190","id":"NEW","g":"a vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2020-3298","id":"NEW","g":"a vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2017-0199","id":"E7","g":null,"p":null,"r":null},{"m":"CVE-2021-44026","id":"E45","g":null,"p":null,"r":null},{"m":"CVE-2021-31207","id":"E41","g":null,"p":null,"r":null},{"m":"CVE-2022-24521","id":"NEW","g":"a vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2020-3283","id":"E1","g":null,"p":null,"r":null},{"m":"CVE-2020-3191","id":"E59","g":null,"p":null,"r":null},{"m":"CVE-2019-17666","id":"NEW","g":"a vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2020-3759","id":"E80","g":null,"p":null,"r":null},{"m":"CVE-2018-8170","id":"E4","g":null,"p":null,"r":null},{"m":"CVE-2021-32648","id":"E43","g":null,"p":null,"r":null},{"m":"CVE-2018-8132","id":"E8","g":null,"p":null,"r":null},{"m":"CVE-2018-8120","id":"E34","g":null,"p":null,"r":null},{"m":"CVE-2020-3741","id":"E76","g":null,"p":null,"r":null},{"m":"CVE-2018-8134","id":"E37","g":null,"p":null,"r":null},{"m":"CVE-2018-8129","id":"E54","g":null,"p":null,"r":null},{"m":"CVE-2020-3195","id":"E71","g":null,"p":null,"r":null},{"m":"CVE-2021-27065","id":"E86","g":null,"p":null,"r":null},{"m":"CVE-2018-0854","id":"E29","g":null,"p":null,"r":null},{"m":"CVE-2018-8174","id":"E77","g":null,"p":null,"r":null},{"m":"CVE-2017-11882","id":"E61","g":null,"p":null,"r":null},{"m":"CVE-2020-0611","id":"E85","g":null,"p":null,"r":null},{"m":"CVE-2020-7048","id":"E84","g":null,"p":null,"r":null},{"m":"CVE-2018-8141","id":"E46","g":null,"p":null,"r":null},{"m":"CVE-2020-35730","id":"E88","g":null,"p":null,"r":null},{"m":"CVE-2018-8136","id":"E78","g":null,"p":null,"r":null},{"m":"CVE-2018-6882","id":"E35","g":null,"p":null,"r":null},{"m":"CVE-2020-3757","id":"E75","g":null,"p":null,"r":null},{"m":"CVE-2020-7047","id":"E49","g":null,"p":null,"r":null},{"m":"CVE-2020-3125","id":"E32","g":null,"p":null,"r":null},{"m":"CVE-2018-8127","id":"E65","g":null,"p":null,"r":null},{"m":"CVE-2017-8759","id":"E48","g":null,"p":null,"r":null},{"m":"CVE-2020-3196","id":"E67","g":null,"p":null,"r":null},{"m":"CVE-2018-8124","id":"E68","g":null,"p":null,"r":null},{"m":"CVE-2020-0610","id":"E83","g":null,"p":null,"r":null},{"m":"CVE-2021-26855","id":"E39","g":null,"p":null,"r":null},{"m":"CVE-2020-3760","id":"E82","g":null,"p":null,"r":null},{"m":"CVE-2021-26858","id":"E81","g":null,"p":null,"r":null},{"m":"CVE-2020-3118","id":"E56","g":null,"p":null,"r":null},{"m":"CVE-2020-3120","id":"E55","g":null,"p":null,"r":null},{"m":"CVE-2020-3259","id":"E28","g":null,"p":null,"r":null},{"m":"CVE-2020-0609","id":"E60","g":null,"p":null,"r":null},{"m":"CVE-2020-3111","id":"E5","g":null,"p":null,"r":null}]}

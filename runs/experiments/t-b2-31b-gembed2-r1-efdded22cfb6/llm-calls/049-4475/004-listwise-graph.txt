@@ -1,0 +1,278 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 299 canonicals"
+Entities:
+E1. Apple Mail
+E2. Mimikatz
+E3. Brave Browser
+E4. Mozilla
+E5. Misha
+E6. Opera Browser
+E7. iOS Mail
+E8. WinRAR
+E9. Opera Mail
+E10. CMS Drupal
+E11. Zoom
+E12. Drupalgeddon2
+E13. Zimbra
+E14. Pocomail
+E15. Filezilla
+E16. CVE-2018-7600
+E17. jDownloader
+E18. PGP
+E19. sysm.exe
+E20. Chrome [aka Google Chrome]
+E21. OpenPGP
+E22. CVE-2017-17689
+E23. MS Office [aka Microsoft Office]
+E24. timeout.exe
+E25. EFAIL
+E26. Firefox [aka Mozilla Firefox]
+E27. Thunderbird [aka Mozilla Thunderbird]
+E28. Firefox ESR
+E29. Internet Explorer
+E30. Gozi
+E31. IceDragon
+E32. Joomla
+E33. Foxmail
+E34. Windows SMBv1
+E35. WinSCP
+E36. SmartFTP
+E37. Double Kill
+E38. FTP Commander
+E39. VPNFilter
+E40. WS_FTP
+E41. Windows 2008 R2
+E42. VMware Fusion
+E43. VMware Tools
+E44. Cisco IOS
+E45. VMware Fusion Pro
+E46. Cisco IOS XE
+E47. VMware Workstation Pro
+E48. VMware Workstation Player
+E49. Cisco Firepower Management Center (FMC)
+E50. Cisco Firepower Threat Defense (FTD) Software
+E51. Cisco Adaptive Security Appliance (ASA) Software
+E52. Cisco Discovery Protocol (CDP)
+E53. Cisco FXOS
+E54. CentBrowser
+E55. Microsoft Exchange Server
+E56. Elements Browser
+E57. OpenSSL
+E58. S/MIME
+E59. OpenVPN
+E60. CVE-2017-17688
+E61. GreyEnergy
+E62. Компания.png
+E63. Remote Desktop Protocol (RDP)
+E64. sserv.jpg
+E65. Heartbleed (CVE-2014-0160)
+E66. Outlook [aka Microsoft Outlook]
+E67. Claws Mail
+E68. Postbox Credential
+E69. Windows [aka Microsoft Windows]
+E70. WinExe
+E71. Liebao Browser
+E72. nginx
+E73. ./decpded_page.html
+E74. Apache
+E75. Win32k
+E76. ./перевірити діяльність.html
+E77. Windows 7
+E78. spisok_24.08.2018.com
+E79. Лица, которые переместились из АР Крым и районов проведения антитерротистической операции.com
+E80. TeamViewer
+E81. Adobe Reader DC
+E82. DAAL
+E83. crsse.exe
+E84. Cisco IOS XR
+E85. iOS
+E86. Cisco NX-OS
+E87. CVE-2020-3195
+E88. DROWN (CVE-2016-0800)
+E89. SSL 3.0
+E90. FREAK (CVE-2015-0204)
+E91. PowerShell [aka powershell.exe]
+E92. MS Word [aka Microsoft Word]
+E93. Troldesh/Shade [aka Troldesh, Shade, XTBL, Trojan.Encoder.858]
+E94. WP Database Reset
+E95. 360Chrome Browser
+E96. ChromePlus Browser
+E97. Iridium Browser
+E98. 7Star Browser
+E99. Orbitum Browser
+E100. Amigo Browser
+E101. CVE-2020-3187
+E102. CVE-2020-3119
+E103. CVE-2020-0601
+E104. CVE-2020-3259
+E105. CVE-2020-3179
+E106. CVE-2020-3110
+E107. CVE-2020-0609
+E108. CVE-2020-3255
+E109. CVE-2020-3118
+E110. Linux
+E111. CVE-2020-3189
+E112. dnsmasq
+E113. spi.exe
+E114. ./рахунки ООО Спецстрой.xls.js
+E115. CVE-2020-3757
+E116. CVE-2020-3283
+E117. CVE-2020-3125
+E118. CVE-2020-3760
+E119. MS Excel
+E120. VMRC для Mac
+E121. CDPwn
+E122. cmd.exe
+E123. SMB протокол
+E124. watchOS
+E125. iPadOS
+E126. tvOS
+E127. ChakraCore
+E128. WinRAR 5.70 Beta 1
+E129. zakon.rar
+E130. CVE-2018-20253
+E131. Smokeloader
+E132. CVE-2018-20250
+E133. CVE-2020-3111
+E134. CVE-2020-3196
+E135. CVE-2020-3254
+E136. CVE-2020-3759
+E137. CVE-2020-0610
+E138. CVE-2020-3191
+E139. Hashcat
+E140. Заявка.js
+E141. Microsoft Edge
+E142. Adobe Flash Player
+E143. Adobe Framemaker
+E144. Adobe Digital Editions
+E145. Adobe Experience Manager
+E146. Adobe Illustrator CC
+E147. CVE-2017-0144
+E148. Logjam (CVE-2015-4000)
+E149. CVE-2017-0199
+E150. CVE-2017-11882
+E151. CVE-2019-17666
+E152. CVE-2020-3298
+E153. CVE-2020-3741
+E154. Adobe Acrobat Reader
+E155. Epic Privacy Browser
+E156. Kometa Browser
+E157. Uran Browser
+E158. CVE-2020-3120
+E159. POODLE (CVE-2014-3566)
+E160. Agent Tesla
+E161. Windows Remote Desktop Client
+E162. Windows Host Compute Service Shim
+E163. Microsoft SQL Server (MSSQL)
+E164. Microsoft Office 2016 [aka Office 2016]
+E165. MS PowerPoint
+E166. Microsoft Office 2010 [aka Office 2010]
+E167. Microsoft Office 2007 [aka Office 2007]
+E168. Microsoft Office 2013 [aka Office 2013]
+E169. Microsoft Office Services and Web Apps
+E170. Microsoft Equation Editor
+Mentions:
+M1. "Zimbra" (Software) — options: E1, E2, E3, E4
+M2. "Joomla" (Software) — options: E10, E11, E12, E4
+M3. "S/MIME" (Software) — options: E18, E19, E20, E21
+M4. "Mozilla" (Software) — options: E26, E15, E27, E28
+M5. "Claws Mail" (Software) — options: E1, E7, E13, E9
+M6. "Filezilla" (Software) — options: E35, E4, E36, E37
+M7. "VMware ESXi" (Software) — options: E41, E42, E43, E44
+M8. "Cisco Firepower Management Center (FMC)" (Software) — options: E50, E51, E52, E53
+M9. "OpenPGP" (Software) — options: E18, E57, E58, E59
+M10. "OpenVPN" (Software) — options: E57, E21, E63, E64
+M11. "Foxmail" (Software) — options: E1, E14, E7, E13
+M12. "Linux" (Software) — options: E69, E70, E71, E44
+M13. "Zoom" (Software) — options: E13, E32, E77, E14
+M14. "Postbox Credential" (Software) — options: E1, E81, E82, E7
+M15. "Cisco IOS" (Software) — options: E46, E53, E51, E84
+M16. "OpenSSL" (Software) — options: E65, E21, E59, E88
+M17. "Pocomail" (Software) — options: E1, E33, E7, E66
+M18. "WordPress" (Software) — options: E32, E57, E92, E10
+M19. "Chromium Browser" (Software) — options: E95, E96, E29, E97
+M20. "CVE-2020-3189" (Software) — options: E101, E102, E103, E104
+M21. "nginx" (Software) — options: E74, E110, E73, E111
+M22. "CVE-2020-3759" (Software) — options: E104, E105, E115, E103
+M23. "CMS Drupal" (Software) — options: E12, E119, E120, E32
+M24. "macOS" (Software) — options: E124, E7, E1, E125
+M25. "WinRAR" (Software) — options: E128, E75, E35, E70
+M26. "CVE-2020-3191" (Software) — options: E105, E117, E133, E87
+M27. "CVE-2020-3259" (Software) — options: E108, E135, E103, E116
+M28. "CVE-2020-3187" (Software) — options: E111, E103, E105, E106
+M29. "CVE-2020-3179" (Software) — options: E117, E102, E106, E103
+M30. "CVE-2020-3195" (Software) — options: E101, E105, E117, E138
+M31. "Mimikatz" (Software) — options: E34, E5, E58, E139
+M32. "CVE-2020-3196" (Software) — options: E101, E105, E138, E103
+M33. "CVE-2020-3119" (Software) — options: E105, E117, E106, E103
+M34. "CVE-2020-3757" (Software) — options: E116, E105, E136, E103
+M35. "CVE-2020-3283" (Software) — options: E105, E101, E104, E103
+M36. "CVE-2020-3118" (Software) — options: E105, E117, E106, E103
+M37. "CVE-2020-3111" (Software) — options: E105, E117, E106, E103
+M38. "Adobe Acrobat Reader" (Software) — options: E81, E142, E143, E144
+M39. "POODLE (CVE-2014-3566)" (Software) — options: E90, E65, E88, E147
+M40. "CVE-2020-3255" (Software) — options: E104, E135, E103, E116
+M41. "CVE-2020-3741" (Software) — options: E105, E116, E133, E136
+M42. "CVE-2020-3110" (Software) — options: E105, E117, E133, E109
+M43. "CVE-2020-3254" (Software) — options: E104, E108, E103, E116
+M44. "Adobe Experience Manager" (Software) — options: E153, E143, E81, E154
+M45. "Opera Browser" (Software) — options: E9, E156, E29, E71
+M46. "CVE-2020-3125" (Software) — options: E105, E158, E103, E116
+M47. "Heartbleed (CVE-2014-0160)" (Software) — options: E88, E159, E90, E147
+M48. "CVE-2020-3760" (Software) — options: E105, E116, E106, E136
+M49. "Qualys SSL Client Test" (Software) — options: E90, E160, E89, E161
+M50. "CVE-2020-3120" (Software) — options: E117, E105, E106, E103
+M51. "MS Office" (Software) — options: E119, E164, E92, E165
+
+=== RESPONSE (30.9s, in 5176 / out 11030 tok, stop) ===
+{"v":[{"m":"Zimbra","id":"NEW","g":"email and collaboration software","p":"E13","r":"v"},{"m":"Joomla","id":"NEW","g":"content management system","p":"E32","r":"v"},{"m":"S/MIME","id":"NEW","g":"email encryption standard","p":"E58","r":"v"},{"m":"Mozilla","id":"NEW","g":"software organization","p":"E4","r":"v"},{"m":"Claws Mail","id":"NEW","g":"email client","p":"E67","r":"v"},{"m":"Filezilla","id":"NEW","g":"FTP client","p":"E15","r":"v"},{"m":"VMware ESXi","id":"NEW","g":"hypervisor","p":null,"r":null},{"m":"Cisco Firepower Management Center (FMC)","id":"NEW","g":"Cisco security management system","p":"E49","r":"v"},{"m":"OpenPGP","id":"NEW","g":"encryption standard","p":"E21","r":"v"},{"m":"OpenVPN","id":"NEW","g":"VPN software","p":"E59","r":"v"},{"m":"Foxmail","id":"NEW","g":"email client","p":"E33","r":"v"},{"m":"Linux","id":"NEW","g":"open-source operating system kernel","p":"E110","r":"v"},{"m":"Zoom","id":"NEW","g":"video conferencing software","p":"E11","r":"v"},{"m":"Postbox Credential","id":"NEW","g":"credential file for Postbox","p":"E68","r":"v"},{"m":"Cisco IOS","id":"NEW","g":"network operating system","p":"E44","r":"v"},{"m":"OpenSSL","id":"NEW","g":"cryptographic library","p":"E57","r":"v"},{"m":"Pocomail","id":"NEW","g":"email client","p":"E14","r":"v"},{"m":"WordPress","id":"NEW","g":"content management system","p":null,"r":null},{"m":"Chromium Browser","id":"NEW","g":"open source browser project","p":"E20","r":"b"},{"m":"CVE-2020-3189","id":"NEW","g":"vulnerability identifier","p":"E111","r":"v"},{"m":"nginx","id":"NEW","g":"web server","p":"E72","r":"v"},{"m":"CVE-2020-3759","id":"NEW","g":"vulnerability identifier","p":"E136","r":"v"},{"m":"CMS Drupal","id":"NEW","g":"content management system","p":"E10","r":"v"},{"m":"macOS","id":"NEW","g":"Apple operating system","p":"E85","r":"b"},{"m":"WinRAR","id":"NEW","g":"archive manager","p":"E8","r":"v"},{"m":"CVE-2020-3191","id":"NEW","g":"vulnerability identifier","p":"E138","r":"v"},{"m":"CVE-2020-3259","id":"NEW","g":"vulnerability identifier","p":"E104","r":"v"},{"m":"CVE-2020-3187","id":"NEW","g":"vulnerability identifier","p":"E101","r":"v"},{"m":"CVE-2020-3179","id":"NEW","g":"vulnerability identifier","p":"E105","r":"v"},{"m":"CVE-2020-3195","id":"NEW","g":"vulnerability identifier","p":"E87","r":"v"},{"m":"Mimikatz","id":"NEW","g":"credential theft tool","p":"E2","r":"v"},{"m":"CVE-2020-3196","id":"NEW","g":"vulnerability identifier","p":"E134","r":"v"},{"m":"CVE-2020-3119","id":"NEW","g":"vulnerability identifier","p":"E102","r":"v"},{"m":"CVE-2020-3757","id":"NEW","g":"vulnerability identifier","p":"E115","r":"v"},{"m":"CVE-2020-3283","id":"NEW","g":"vulnerability identifier","p":"E116","r":"v"},{"m":"CVE-2020-3118","id":"NEW","g":"vulnerability identifier","p":"E109","r":"v"},{"m":"CVE-2020-3111","id":"NEW","g":"vulnerability identifier","p":"E133","r":"v"},{"m":"Adobe Acrobat Reader","id":"NEW","g":"PDF viewer","p":"E154","r":"v"},{"m":"POODLE (CVE-2014-3566)","id":"NEW","g":"SSL vulnerability","p":"E159","r":"v"},{"m":"CVE-2020-3255","id":"NEW","g":"vulnerability identifier","p":"E108","r":"v"},{"m":"CVE-2020-3741","id":"NEW","g":"vulnerability identifier","p":"E153","r":"v"},{"m":"CVE-2020-3110","id":"NEW","g":"vulnerability identifier","p":"E106","r":"v"},{"m":"CVE-2020-3254","id":"NEW","g":"vulnerability identifier","p":"E135","r":"v"},{"m":"Adobe Experience Manager","id":"NEW","g":"content management system","p":"E145","r":"v"},{"m":"Opera Browser","id":"NEW","g":"web browser","p":"E6","r":"v"},{"m":"CVE-2020-3125","id":"NEW","g":"vulnerability identifier","p":"E117","r":"v"},{"m":"Heartbleed (CVE-2014-0160)","id":"NEW","g":"OpenSSL vulnerability","p":"E65","r":"v"},{"m":"CVE-2020-3760","id":"NEW","g":"vulnerability identifier","p":"E118","r":"v"},{"m":"Qualys SSL Client Test","id":"NEW","g":"SSL vulnerability testing tool","p":null,"r":null},{"m":"CVE-2020-3120","id":"NEW","g":"vulnerability identifier","p":"E158","r":"v"},{"m":"MS Office","id":"NEW","g":"office productivity suite","p":"E23","r":"v"}]}

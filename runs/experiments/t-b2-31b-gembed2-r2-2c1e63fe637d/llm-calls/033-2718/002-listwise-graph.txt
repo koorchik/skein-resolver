@@ -1,0 +1,282 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 160 canonicals"
+Entities:
+E1. Trojan:Win32/Sonoko.A!ms
+E2. nslookup
+E3. SMB протокол
+E4. Zoom
+E5. Cisco NX-OS
+E6. Chipset Device Software
+E7. ssj.jpg
+E8. Cisco Firepower Threat Defense (FTD) Software
+E9. info.zip
+E10. Sonoko
+E11. CoronaMap.exe
+E12. MS Excel
+E13. Troldesh/Shade
+E14. Corona-virus-Map.com.exe
+E15. MS Office [aka Microsoft Office]
+E16. Windows [aka Microsoft Windows]
+E17. MS PowerPoint
+E18. AZORult
+E19. Propagate/Unwaders
+E20. RDP Gateway Server
+E21. Remote Desktop Protocol (RDP)
+E22. Processor Graphics
+E23. Propagate
+E24. Smokeloader
+E25. Cisco IOS XR
+E26. Cisco FXOS
+E27. Adobe Reader DC
+E28. TeamViewer
+E29. До оплати рах.ф. 74 - 2018р.js
+E30. Рахунки за выполненные работы от 11.12.2018.js
+E31. Информация.js
+E32. ./рахунки ООО Спецстрой.xls.js
+E33. За текущий месяц рах.ф. Спецбуд.lzh
+E34. zakon.rar
+E35. PGMB New Order 18-2077.xlsx
+E36. CVE-2019-0708
+E37. csrss.exe
+E38. spi.exe
+E39. 223329.exe
+E40. cmd.exe
+E41. 966449.exe
+E42. major.exe
+E43. ckZ89.ExE
+E44. sysm.exe
+E45. PowerShell [aka powershell.exe]
+E46. рахунки компания технік.lzh
+E47. Рахунки и новые списки.lzh
+E48. Компания.png
+E49. inf.zip
+E50. До оплати від 11.12.18.lzh
+E51. рахунки компания технік.zip
+E52. RWC 3 for Windows
+E53. Адресса отгрузки.xlsx
+E54. ./перевірити діяльність.html
+E55. зг. дог рах. фак 708.js
+E56. Adobe Acrobat Reader
+E57. Firefox для iOS
+E58. Архів листування російської терористки М.Колєди.exe
+E59. ./decpded_page.html
+E60. CVE-2020-3125
+E61. CVE-2020-3283
+E62. CVE-2020-0611
+E63. CVE-2020-0601
+E64. CVE-2020-3259
+E65. CVE-2020-0609
+E66. CVE-2020-3179
+E67. CVE-2020-3255
+E68. CVE-2020-3110
+E69. CVE-2017-11882
+E70. CVE-2018-20250
+E71. CVE-2020-3196
+E72. CVE-2019-17666
+E73. CVE-2018-20251
+E74. CVE-2020-0610
+E75. CVE-2020-3111
+E76. CVE-2017-0199
+E77. CVE-2018-20252
+E78. CVE-2020-3118
+E79. CVE-2018-20253
+E80. Windows Server 2019
+E81. CVE-2020-3760
+E82. Windows 7
+E83. Windows 2008 R2
+E84. CVE-2020-7048
+E85. CVE-2020-3187
+E86. CVE-2020-3759
+E87. CVE-2020-3741
+E88. Misha
+E89. CVE-2020-7047
+E90. CVE-2020-3189
+E91. CVE-2020-3119
+E92. CVE-2020-3757
+E93. CVE-2020-3191
+E94. CVE-2020-3254
+E95. CVE-2020-3120
+E96. CVE-2020-3195
+E97. SNMP Subagent Stand-Alone for Windows
+E98. Microsoft Windows Server 2003
+E99. Microsoft Equation Editor
+E100. Microsoft Windows Server 2008 for 32-bit Systems SP2
+E101. Microsoft Office 2007 [aka Office 2007]
+E102. Microsoft Windows XP
+E103. Microsoft Windows Server 2008 for Itanium-based Systems SP2
+E104. CVE-2020-3298
+E105. Cisco Discovery Protocol (CDP)
+E106. Windows Remote Desktop Client
+E107. Cisco Adaptive Security Appliance (ASA) Software
+E108. WinRAR
+E109. Cisco IOS
+E110. Firefox
+E111. macOS
+E112. Windows 10
+E113. Windows Vista
+E114. Windows Server 2008
+E115. Microsoft Windows 7 for x64-based Systems SP1
+E116. WinRAR 5.70 Beta 1
+E117. Linux
+E118. MS Word [aka Microsoft Word]
+E119. Adobe Framemaker
+E120. Adobe Digital Editions
+E121. Adobe Flash Player
+E122. Adobe Experience Manager
+E123. Adobe Illustrator CC
+E124. VMware Workstation Player
+E125. Microsoft Office 2010 [aka Office 2010]
+E126. Cisco IOS XE
+E127. Microsoft Office 2016 [aka Office 2016]
+E128. Microsoft Office 2013 [aka Office 2013]
+E129. iOS
+E130. watchOS
+E131. iPadOS
+E132. tvOS
+E133. WP Database Reset
+E134. VMware Workstation Pro
+E135. Firefox ESR
+E136. VMRC для Mac
+E137. клієнти VMware Horizon для Mac
+E138. VMware Fusion Pro
+E139. VMware Fusion
+E140. VMware ESXi
+E141. VMware Tools
+E142. 07.11.18р список.docx
+Mentions:
+M1. "Sonoko" (Software) — options: E1, E2, E3, E4
+M2. "Trojan:Win32/Sonoko.A!ms" (Software) — options: E10, E11, E12, E13
+M3. "Propagate" (Software) — options: E19, E12, E11, E20
+M4. "Propagate/Unwaders" (Software) — options: E23, E24, E20, E25
+M5. "зг. дог рах. фак 708.js" (Software) — options: E29, E30, E31, E32
+M6. "sysm.exe" (Software) — options: E37, E38, E39, E1
+M7. "966449.exe" (Software) — options: E39, E43, E11, E44
+M8. "223329.exe" (Software) — options: E41, E43, E11, E44
+M9. "рахунки компания технік.zip" (Software) — options: E46, E47, E48, E49
+M10. "рахунки компания технік.lzh" (Software) — options: E51, E47, E48, E32
+M11. "07.11.18р список.docx" (Software) — options: E50, E32, E52, E47
+M12. "За текущий месяц рах.ф. Спецбуд.lzh" (Software) — options: E32, E47, E29, E46
+M13. "./рахунки ООО Спецстрой.xls.js" (Software) — options: E30, E47, E33, E46
+M14. "Адресса отгрузки.xlsx" (Software) — options: E35, E32, E47, E57
+M15. "Компания.png" (Software) — options: E51, E46, E42, E31
+M16. "Corona-virus-Map.com.exe" (Software) — options: E11, E39, E1, E45
+M17. "CVE-2020-0610" (Software) — options: E60, E61, E62, E63
+M18. "CVE-2017-0199" (Software) — options: E64, E69, E61, E36
+M19. "CVE-2020-0611" (Software) — options: E61, E60, E63, E74
+M20. "CVE-2017-11882" (Software) — options: E76, E61, E77, E78
+M21. "CVE-2018-20250" (Software) — options: E64, E73, E60, E77
+M22. "CVE-2019-17666" (Software) — options: E61, E60, E36, E66
+M23. "cmd.exe" (Software) — options: E37, E38, E39, E82
+M24. "CVE-2020-7047" (Software) — options: E61, E60, E84, E63
+M25. "ckZ89.ExE" (Software) — options: E41, E40, E39, E37
+M26. "CVE-2020-3757" (Software) — options: E61, E66, E86, E63
+M27. "AZORult" (Software) — options: E13, E42, E59, E24
+M28. "CVE-2020-7048" (Software) — options: E61, E60, E89, E63
+M29. "CVE-2018-20251" (Software) — options: E70, E79, E77, E64
+M30. "CVE-2020-0609" (Software) — options: E64, E67, E63, E60
+M31. "CVE-2020-3759" (Software) — options: E64, E66, E92, E63
+M32. "CVE-2020-3741" (Software) — options: E66, E61, E75, E86
+M33. "CVE-2020-3298" (Software) — options: E61, E64, E78, E63
+M34. "CVE-2018-20252" (Software) — options: E70, E79, E73, E61
+M35. "CVE-2018-20253" (Software) — options: E70, E64, E73, E61
+M36. "CVE-2020-3760" (Software) — options: E66, E61, E68, E86
+M37. "CVE-2020-3283" (Software) — options: E66, E85, E64, E63
+M38. "CVE-2019-0708" (Software) — options: E64, E72, E67, E76
+M39. "CVE-2020-3120" (Software) — options: E60, E66, E68, E63
+M40. "CVE-2020-0601" (Software) — options: E60, E64, E65, E66
+M41. "CVE-2020-3111" (Software) — options: E66, E60, E68, E63
+M42. "CVE-2020-3125" (Software) — options: E66, E95, E63, E61
+M43. "CVE-2020-3110" (Software) — options: E66, E60, E75, E63
+M44. "CVE-2020-3191" (Software) — options: E66, E71, E75, E96
+M45. "CVE-2020-3179" (Software) — options: E60, E91, E68, E63
+M46. "CVE-2020-3259" (Software) — options: E67, E94, E63, E61
+M47. "Microsoft SQL Server (MSSQL)" (Software) — options: E97, E98, E88, E99
+M48. "CVE-2020-3119" (Software) — options: E66, E60, E68, E63
+M49. "CVE-2020-3254" (Software) — options: E64, E67, E63, E61
+M50. "CVE-2020-3196" (Software) — options: E85, E93, E63, E66
+M51. "CVE-2020-3195" (Software) — options: E71, E85, E60, E93
+M52. "CVE-2020-3255" (Software) — options: E64, E94, E63, E61
+M53. "CVE-2020-3118" (Software) — options: E66, E60, E68, E63
+M54. "CVE-2020-3187" (Software) — options: E90, E63, E71, E68
+M55. "CVE-2020-3189" (Software) — options: E85, E91, E63, E71
+M56. "Remote Desktop Protocol (RDP)" (Software) — options: E36, E105, E106, E83
+M57. "Linux" (Software) — options: E16, E108, E59, E109
+M58. "CoronaMap.exe" (Software) — options: E14, E39, E37, E38
+M59. "Windows" (Software) — options: E82, E112, E83, E40
+M60. "WinRAR" (Software) — options: E116, E34, E82, E16
+M61. "Adobe Acrobat Reader" (Software) — options: E27, E118, E119, E120
+M62. "Adobe Flash Player" (Software) — options: E82, E119, E124, E120
+M63. "Chipset Device Software" (Software) — options: E22, E8, E107, E97
+M64. "MS Office" (Software) — options: E118, E12, E125, E17
+M65. "Cisco IOS" (Software) — options: E126, E26, E107, E25
+M66. "iOS" (Software) — options: E130, E109, E131, E126
+M67. "WordPress" (Software) — options: E133, E16, E118, E11
+M68. "macOS" (Software) — options: E130, E136, E129, E131
+M69. "VMware Workstation Pro" (Software) — options: E124, E138, E139, E140
+M70. "./decpded_page.html" (Software) — options: E54, E41, E23, E39
+M71. "whois" (Software) — options: E2, E16, E59, E88
+M72. "До оплати рах.ф. 74 - 2018р.js" (Software) — options: E30, E50, E55, E33
+M73. "Рахунки за выполненные работы от 11.12.2018.js" (Software) — options: E32, E47, E50, E46
+M74. "Информация.js" (Software) — options: E55, E48, E9, E32
+M75. "zakon.rar" (Software) — options: E108, E46, E42, E116
+M76. "До оплати від 11.12.18.lzh" (Software) — options: E29, E30, E47, E33
+M77. "inf.zip" (Software) — options: E9, E41, E51, E34
+M78. "Рахунки и новые списки.lzh" (Software) — options: E46, E51, E32, E50
+M79. "spi.exe" (Software) — options: E41, E44, E39, E40
+M80. "info.zip" (Software) — options: E49, E31, E82, E51
+M81. "major.exe" (Software) — options: E41, E39, E38, E44
+M82. "./перевірити діяльність.html" (Software) — options: E51, E59, E30, E32
+M83. "Архів листування російської терористки М.Колєди.exe" (Software) — options: E50, E39, E47, E38
+
+=== RESPONSE (69.8s, in 6261 / out 14162 tok, stop) ===
+{"v":[{"m":"Sonoko","id":"E1","g":null,"p":null,"r":null},{"m":"Trojan:Win32/Sonoko.A!ms","id":"E10","g":null,"p":null,"r":null},{"m":"Propagate","id":"NEW","g":"malware","p":null,"r":null},{"m":"Propagate/Unwaders","id":"NEW","g":"malware","p":"E23","r":"n"},{"m":"зг. дог рах. фак 708.js","id":"NEW","g":"malicious JavaScript file","p":null,"r":null},{"m":"sysm.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"966449.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"223329.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"рахунки компания технік.zip","id":"NEW","g":"zip archive","p":null,"r":null},{"m":"рахунки компания технік.lzh","id":"NEW","g":"LZH archive","p":null,"r":null},{"m":"07.11.18р список.docx","id":"NEW","g":"docx document","p":null,"r":null},{"m":"За текущий месяц рах.ф. Спецбуд.lzh","id":"NEW","g":"LZH archive","p":null,"r":null},{"m":"./рахунки ООО Спецстрой.xls.js","id":"NEW","g":"malicious JavaScript file","p":null,"r":null},{"m":"Адресса отгрузки.xlsx","id":"NEW","g":"xlsx spreadsheet","p":null,"r":null},{"m":"Компания.png","id":"NEW","g":"png image","p":null,"r":null},{"m":"Corona-virus-Map.com.exe","id":"NEW","g":"executable file","p":"E11","r":"n"},{"m":"CVE-2020-0610","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2017-0199","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-0611","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2017-11882","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-20250","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2019-17666","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"cmd.exe","id":"NEW","g":"Windows command processor","p":"E16","r":"p"},{"m":"CVE-2020-7047","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"ckZ89.ExE","id":"NEW","g":"executable file","p":null,"r":null},{"m":"CVE-2020-3757","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"AZORult","id":"NEW","g":"malware","p":null,"r":null},{"m":"CVE-2020-7048","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-20251","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-0609","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3759","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3741","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3298","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-20252","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-20253","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3760","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3283","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2019-0708","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3120","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-0601","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3111","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3125","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3110","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3191","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3179","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3259","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"Microsoft SQL Server (MSSQL)","id":"NEW","g":"database management system","p":null,"r":null},{"m":"CVE-2020-3119","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3254","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3196","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3195","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3255","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3118","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3187","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3189","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"Remote Desktop Protocol (RDP)","id":"NEW","g":"network communication protocol","p":null,"r":null},{"m":"Linux","id":"NEW","g":"open-source operating system","p":null,"r":null},{"m":"CoronaMap.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Windows","id":"NEW","g":"operating system","p":null,"r":null},{"m":"WinRAR","id":"NEW","g":"archive utility","p":null,"r":null},{"m":"Adobe Acrobat Reader","id":"NEW","g":"PDF viewer","p":null,"r":null},{"m":"Adobe Flash Player","id":"NEW","g":"multimedia software platform","p":null,"r":null},{"m":"Chipset Device Software","id":"NEW","g":"hardware driver software","p":null,"r":null},{"m":"MS Office","id":"NEW","g":"office productivity suite","p":null,"r":null},{"m":"Cisco IOS","id":"NEW","g":"network operating system","p":null,"r":null},{"m":"iOS","id":"NEW","g":"mobile operating system","p":null,"r":null},{"m":"WordPress","id":"NEW","g":"content management system","p":null,"r":null},{"m":"macOS","id":"NEW","g":"operating system","p":null,"r":null},{"m":"VMware Workstation Pro","id":"NEW","g":"virtualization software","p":null,"r":null},{"m":"./decpded_page.html","id":"NEW","g":"html file","p":null,"r":null},{"m":"whois","id":"NEW","g":"network tool","p":null,"r":null},{"m":"До оплати рах.ф. 74 - 2018р.js","id":"NEW","g":"malicious JavaScript file","p":null,"r":null},{"m":"Рахунки за выполненные работы от 11.12.2018.js","id":"NEW","g":"malicious JavaScript file","p":null,"r":null},{"m":"Информация.js","id":"NEW","g":"malicious JavaScript file","p":null,"r":null},{"m":"zakon.rar","id":"NEW","g":"rar archive","p":null,"r":null},{"m":"До оплати від 11.12.18.lzh","id":"NEW","g":"LZH archive","p":null,"r":null},{"m":"inf.zip","id":"NEW","g":"zip archive","p":null,"r":null},{"m":"Рахунки и новые списки.lzh","id":"NEW","g":"LZH archive","p":null,"r":null},{"m":"spi.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"info.zip","id":"NEW","g":"zip archive","p":null,"r":null},{"m":"major.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"./перевірити діяльність.html","id":"NEW","g":"html file","p":null,"r":null},{"m":"Архів листування російської терористки М.Колєди.exe","id":"NEW","g":"executable file","p":null,"r":null}]}

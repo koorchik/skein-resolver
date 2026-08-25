@@ -1,0 +1,226 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 107 canonicals"
+Entities:
+E1. ПрАТ «НЕК «Укренерго»
+E2. АТ "Укрзалізниця"
+E3. НАК «Нафтогаз України»
+E4. AS37148 (нігерійський оператор телекомунікацій)
+E5. Українське національне інформаційне агентство "Укрінформ"
+E6. Linux Team
+E7. ДП «Адміністрація морських портів України»
+E8. Платформа єДопомога
+E9. Telegram
+E10. BleepingComputer
+E11. Security Newspaper
+E12. PortSwigger
+E13. DigiCert
+E14. Realtek
+E15. FireEye
+E16. Check Point Research
+E17. Тренінговий кіберцентр
+E18. Pipedream
+E19. АТ "Укртелеком"
+E20. Україна 24
+E21. IFES Україна
+E22. Qualys
+E23. Приватбанк (AS15742)
+E24. Great C Technologies Inc
+E25. Національний технічний університет України «Київський політехнічний інститут імені Ігоря Сікорського»
+E26. Інститут спеціального зв’язку та захисту інформації Національного технічного університету України «Київський політехнічний інститут імені Ігоря Сікорського»
+E27. ГО «Міжнародний університет цифрової безпеки»
+E28. Публичное Акционерное Общество «БИНБАНК»
+E29. Естонський центр Східного партнерства (ECEAP)
+E30. Паризький форум миру
+E31. Група урядових експертів (GGE)
+E32. Міжнародною фундацією виборчих систем (IFES)
+E33. vServerCo
+E34. Inq-Digital-Nigeria-AS (AS16284)
+E35. Unit 42
+E36. Vimpelcom
+E37. Робоча група відкритого складу (OEWG)
+E38. UKR.NET
+E39. iroko.net
+E40. ТСН
+E41. Fortinet
+E42. ESET
+E43. FIRST
+E44. Єдиний Компенсаційний Центр Повернення Невиплачених Грошових Коштів
+E45. Університет Джона Хопкінса
+E46. Глобальна комісія зі стабільності кіберпростору (GCSC)
+E47. Європейський Союз [aka ЄС]
+E48. CybExer Technologies
+E49. Товариство Червоного Хреста
+E50. CERT Polska
+E51. Кіберцентр UA30
+E52. Gazprombank
+E53. CyberArmyofRussia_Reborn
+E54. Google
+E55. LiteManagerTeam
+E56. Intel
+E57. Discord
+E58. hetzner.com
+E59. Facebook
+E60. Adobe
+E61. 360Netlab
+E62. Mandiant
+E63. Фонд "Альянс Демократій"
+E64. Центр соціальних та маркетингових досліджень (SOCIS)
+E65. DigitalOcean
+E66. digitalocean.com
+E67. Cloudflare Inc. [aka Cloudflare]
+E68. namesilo.com
+E69. hostkey.com
+E70. Cisco
+E71. BreakingSecurity
+E72. тomhunter
+E73. Raidforums
+E74. VMware
+E75. George Alan Developments Incorporated
+E76. Check Point
+E77. iTnews
+E78. Rapid7
+E79. cherryservers.com
+E80. VirusTotal
+E81. NameSilo
+E82. SonarSource
+E83. Shodan
+E84. Talos Intelligence
+E85. GitHub
+E86. HostIQ
+E87. WebFactory Ltd
+E88. Drupal
+E89. Safenames
+E90. Zimbra
+E91. Usoris
+E92. WordFence
+E93. Apple
+E94. Oracle
+E95. NirSoft
+E96. Mikael LLC
+E97. NO-IP
+E98. Microsoft
+E99. Mozilla
+E100. OASIS
+E101. WEX
+E102. Група високого рівня
+E103. NATO
+Mentions:
+M1. "АТ "Укртелеком"" (Organization) — options: E1, E2, E3, E4
+M2. "BreakingSecurity" (Organization) — options: E10, E11, E12, E13
+M3. "АТ "Укрзалізниця"" (Organization) — options: E7, E19, E20, E21
+M4. "ПрАТ «НЕК «Укренерго»" (Organization) — options: E3, E19, E7, E2
+M5. "НАК «Нафтогаз України»" (Organization) — options: E1, E21, E20, E7
+M6. "Українське національне інформаційне агентство "Укрінформ"" (Organization) — options: E1, E28, E26, E19
+M7. "ДП «Адміністрація морських портів України»" (Organization) — options: E1, E3, E30, E5
+M8. "Приватбанк (AS15742)" (Organization) — options: E33, E1, E34, E20
+M9. "UKR.NET" (Organization) — options: E5, E39, E40, E41
+M10. "Національний технічний університет України «Київський політехнічний інститут імені Ігоря Сікорського»" (Organization) — options: E26, E5, E27, E44
+M11. "ГО «Міжнародний університет цифрової безпеки»" (Organization) — options: E26, E45, E47, E44
+M12. "AS37148 (нігерійський оператор телекомунікацій)" (Organization) — options: E34, E45, E30, E19
+M13. "Україна 24" (Organization) — options: E5, E21, E40, E2
+M14. "Платформа єДопомога" (Organization) — options: E49, E1, E5, E47
+M15. "Центр соціальних та маркетингових досліджень (SOCIS)" (Organization) — options: E21, E37, E31, E17
+M16. "Публичное Акционерное Общество «БИНБАНК»" (Organization) — options: E52, E5, E49, E23
+M17. "Telegram" (Organization) — options: E53, E18, E6, E54
+M18. "Gazprombank" (Organization) — options: E3, E60, E61, E28
+M19. "Міжнародною фундацією виборчих систем (IFES)" (Organization) — options: E21, E27, E63, E37
+M20. "Inq-Digital-Nigeria-AS (AS16284)" (Organization) — options: E23, E65, E4, E66
+M21. "Єдиний Компенсаційний Центр Повернення Невиплачених Грошових Коштів" (Organization) — options: E8, E29, E17, E49
+M22. "Естонський центр Східного партнерства (ECEAP)" (Organization) — options: E47, E49, E44, E30
+M23. "Vimpelcom" (Organization) — options: E33, E68, E3, E58
+M24. "BleepingComputer" (Organization) — options: E71, E72, E73, E74
+M25. "Security Newspaper" (Organization) — options: E76, E50, E71, E10
+M26. "Raidforums" (Organization) — options: E10, E60, E30, E78
+M27. "CyberArmyofRussia_Reborn" (Organization) — options: E73, E79, E48, E52
+M28. "vServerCo" (Organization) — options: E69, E79, E58, E70
+M29. "360Netlab" (Organization) — options: E83, E55, E38, E84
+M30. "hostkey.com" (Organization) — options: E79, E58, E86, E68
+M31. "Facebook" (Organization) — options: E54, E68, E87, E9
+M32. "CERT Polska" (Organization) — options: E48, E76, E13, E16
+M33. "WordFence" (Organization) — options: E84, E67, E80, E82
+M34. "cherryservers.com" (Organization) — options: E69, E66, E33, E58
+M35. "Linux Team" (Organization) — options: E55, E90, E56, E18
+M36. "iTnews" (Organization) — options: E10, E56, E11, E74
+M37. "PortSwigger" (Organization) — options: E92, E41, E16, E11
+M38. "Google" (Organization) — options: E9, E60, E93, E59
+M39. "CybExer Technologies" (Organization) — options: E47, E24, E42, E50
+M40. "Discord" (Organization) — options: E9, E70, E54, E13
+M41. "LiteManagerTeam" (Organization) — options: E91, E6, E33, E18
+M42. "hetzner.com" (Organization) — options: E69, E68, E79, E66
+M43. "Microsoft" (Organization) — options: E54, E95, E56, E43
+M44. "Drupal" (Organization) — options: E65, E80, E92, E50
+M45. "NirSoft" (Organization) — options: E91, E98, E80, E43
+M46. "NO-IP" (Organization) — options: E81, E86, E61, E89
+M47. "HostIQ" (Organization) — options: E69, E41, E58, E61
+M48. "Apple" (Organization) — options: E54, E60, E94, E9
+M49. "WebFactory Ltd" (Organization) — options: E92, E57, E101, E42
+M50. "Wikipedia" (Organization) — options: E2, E13, E18, E14
+M51. "Realtek" (Organization) — options: E56, E93, E18, E41
+M52. "Fortinet" (Organization) — options: E42, E38, E76, E12
+M53. "Cloudflare Inc." (Organization) — options: E65, E92, E74, E24
+M54. "ESET" (Organization) — options: E41, E95, E47, E38
+M55. "FIRST" (Organization) — options: E54, E95, E15, E42
+M56. "Intel" (Organization) — options: E54, E6, E84, E14
+M57. "Cisco" (Organization) — options: E41, E57, E84, E36
+M58. "Mozilla" (Organization) — options: E54, E67, E61, E90
+M59. "Check Point" (Organization) — options: E16, E42, E50, E79
+M60. "NATO" (Organization) — options: E3, E81, E36, E95
+M61. "Great C Technologies Inc" (Organization) — options: E75, E48, E54, E67
+M62. "VMware" (Organization) — options: E42, E67, E41, E82
+M63. "Safenames" (Organization) — options: E81, E73, E68, E55
+M64. "Rapid7" (Organization) — options: E41, E93, E73, E22
+M65. "SonarSource" (Organization) — options: E12, E95, E22, E92
+M66. "NameSilo" (Organization) — options: E68, E89, E103, E97
+
+=== RESPONSE (66.9s, in 4675 / out 15974 tok, stop) ===
+{"v":[{"m":"АТ \"Укртелеком\"","id":"NEW","g":"a Ukrainian telecommunications company","p":null,"r":null},{"m":"BreakingSecurity","id":"NEW","g":"a cybersecurity news website","p":null,"r":null},{"m":"АТ \"Укрзалізниця\"","id":"NEW","g":"the state railway operator of Ukraine","p":null,"r":null},{"m":"ПрАТ «НЕК «Укренерго»","id":"NEW","g":"the national power grid operator of Ukraine","p":null,"r":null},{"m":"НАК «Нафтогаз України»","id":"NEW","g":"the state-owned oil and gas company of Ukraine","p":null,"r":null},{"m":"Українське національне інформаційне агентство \"Укрінформ\"","id":"NEW","g":"the national news agency of Ukraine","p":null,"r":null},{"m":"ДП «Адміністрація морських портів України»","id":"NEW","g":"the administration of maritime ports of Ukraine","p":null,"r":null},{"m":"Приватбанк (AS15742)","id":"NEW","g":"a large Ukrainian commercial bank","p":null,"r":null},{"m":"UKR.NET","id":"NEW","g":"a popular Ukrainian web portal","p":null,"r":null},{"m":"Національний технічний університет України «Київський політехнічний інститут імені Ігоря Сікорського»","id":"NEW","g":"a technical university in Kyiv, Ukraine","p":"E26","r":"b"},{"m":"ГО «Міжнародний університет цифрової безпеки»","id":"NEW","g":"an international university for digital security","p":null,"r":null},{"m":"AS37148 (нігерійський оператор телекомунікацій)","id":"NEW","g":"a Nigerian telecommunications operator","p":null,"r":null},{"m":"Україна 24","id":"NEW","g":"a Ukrainian 24-hour news channel","p":null,"r":null},{"m":"Платформа єДопомога","id":"NEW","g":"a Ukrainian charitable aid platform","p":null,"r":null},{"m":"Центр соціальних та маркетингових досліджень (SOCIS)","id":"NEW","g":"a center for social and marketing research","p":null,"r":null},{"m":"Публичное Акционерное Общество «БИНБАНК»","id":"NEW","g":"a Russian public joint-stock bank","p":null,"r":null},{"m":"Telegram","id":"NEW","g":"a cross-platform messaging service","p":null,"r":null},{"m":"Gazprombank","id":"NEW","g":"a large Russian bank","p":null,"r":null},{"m":"Міжнародною фундацією виборчих систем (IFES)","id":"NEW","g":"an international foundation for electoral systems","p":null,"r":null},{"m":"Inq-Digital-Nigeria-AS (AS16284)","id":"NEW","g":"a Nigerian internet service provider","p":null,"r":null},{"m":"Єдиний Компенсаційний Центр Повернення Невиплачених Грошових Коштів","id":"NEW","g":"a center for returning unpaid funds","p":null,"r":null},{"m":"Естонський центр Східного партнерства (ECEAP)","id":"NEW","g":"an Estonian center for the Eastern Partnership","p":null,"r":null},{"m":"Vimpelcom","id":"NEW","g":"a multinational telecommunications company","p":null,"r":null},{"m":"BleepingComputer","id":"NEW","g":"a cybersecurity news and information site","p":null,"r":null},{"m":"Security Newspaper","id":"NEW","g":"a cybersecurity news publication","p":null,"r":null},{"m":"Raidforums","id":"NEW","g":"a hacking forum for leaking data","p":null,"r":null},{"m":"CyberArmyofRussia_Reborn","id":"NEW","g":"a pro-Russian hacking group","p":null,"r":null},{"m":"vServerCo","id":"NEW","g":"a virtual server hosting provider","p":null,"r":null},{"m":"360Netlab","id":"NEW","g":"a networking and server hosting company","p":null,"r":null},{"m":"hostkey.com","id":"NEW","g":"a dedicated server hosting provider","p":null,"r":null},{"m":"Facebook","id":"NEW","g":"a social media and networking service","p":null,"r":null},{"m":"CERT Polska","id":"NEW","g":"the national computer emergency response team of Poland","p":null,"r":null},{"m":"WordFence","id":"NEW","g":"a security company for WordPress websites","p":null,"r":null},{"m":"cherryservers.com","id":"NEW","g":"a cloud and dedicated server provider","p":null,"r":null},{"m":"Linux Team","id":"NEW","g":"a group of developers for Linux","p":null,"r":null},{"m":"iTnews","id":"NEW","g":"an information technology news website","p":null,"r":null},{"m":"PortSwigger","id":"NEW","g":"the makers of Burp Suite","p":null,"r":null},{"m":"Google","id":"NEW","g":"a multinational technology company","p":null,"r":null},{"m":"CybExer Technologies","id":"NEW","g":"a cybersecurity services company","p":null,"r":null},{"m":"Discord","id":"NEW","g":"a VoIP and instant messaging social platform","p":null,"r":null},{"m":"LiteManagerTeam","id":"NEW","g":"developers of LiteManager remote administration software","p":null,"r":null},{"m":"hetzner.com","id":"NEW","g":"a German cloud and hosting provider","p":null,"r":null},{"m":"Microsoft","id":"NEW","g":"a multinational technology company","p":null,"r":null},{"m":"Drupal","id":"NEW","g":"an open-source content management system","p":null,"r":null},{"m":"NirSoft","id":"NEW","g":"a provider of small utility tools","p":null,"r":null},{"m":"NO-IP","id":"NEW","g":"a dynamic DNS service provider","p":null,"r":null},{"m":"HostIQ","id":"NEW","g":"a web hosting and domain provider","p":null,"r":null},{"m":"Apple","id":"NEW","g":"a multinational technology company","p":null,"r":null},{"m":"WebFactory Ltd","id":"NEW","g":"a web development and design company","p":null,"r":null},{"m":"Wikipedia","id":"NEW","g":"a free online encyclopedia","p":null,"r":null},{"m":"Realtek","id":"NEW","g":"a fabless semiconductor corporation","p":null,"r":null},{"m":"Fortinet","id":"NEW","g":"a cybersecurity company","p":null,"r":null},{"m":"Cloudflare Inc.","id":"NEW","g":"a web infrastructure and security company","p":null,"r":null},{"m":"ESET","id":"NEW","g":"a cybersecurity company","p":null,"r":null},{"m":"FIRST","id":"NEW","g":"a global forum for security incident response","p":null,"r":null},{"m":"Intel","id":"NEW","g":"a multinational semiconductor company","p":null,"r":null},{"m":"Cisco","id":"NEW","g":"a multinational technology conglomerate","p":null,"r":null},{"m":"Mozilla","id":"NEW","g":"a non-profit organization that develops Firefox","p":null,"r":null},{"m":"Check Point","id":"NEW","g":"a cybersecurity company","p":null,"r":null},{"m":"NATO","id":"NEW","g":"an intergovernmental military alliance","p":null,"r":null},{"m":"Great C Technologies Inc","id":"NEW","g":"a technology services company","p":null,"r":null},{"m":"VMware","id":"NEW","g":"a cloud computing and virtualization company","p":null,"r":null},{"m":"Safenames","id":"NEW","g":"a corporate domain name management company","p":null,"r":null},{"m":"Rapid7","id":"NEW","g":"a cybersecurity company","p":null,"r":null},{"m":"SonarSource","id":"NEW","g":"a software quality and security company","p":null,"r":null},{"m":"NameSilo","id":"NEW","g":"a domain name registrar","p":null,"r":null}]}

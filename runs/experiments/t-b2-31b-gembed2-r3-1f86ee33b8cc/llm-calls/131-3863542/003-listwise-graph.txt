@@ -1,0 +1,242 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 568 canonicals"
+Entities:
+E1. Remote Utilities - Host
+E2. LiteManager
+E3. certutil
+E4. Windows Remote Desktop Client
+E5. Remote Desktop Protocol (RDP)
+E6. TeamViewer
+E7. Adobe Digital Editions
+E8. Schwarze-Sonne-Remote-Access-Trojan
+E9. RemCom
+E10. Windows_Security_Update_xBQ
+E11. 223329.exe
+E12. b.exe
+E13. Windows_Security_Update_gMj
+E14. 62ea.exe
+E15. one.exe
+E16. Windows_Security_Update_HxW
+E17. 966449.exe
+E18. cmd.exe
+E19. alt.exe
+E20. Base-Update.exe [aka base_update.exe]
+E21. AdvancedRun.exe
+E22. SPECTR.Installer
+E23. icacls.exe
+E24. loader.exe
+E25. dropper.exe
+E26. crsse.exe
+E27. explorer.exe
+E28. rutserv.exe
+E29. Icloud.exe
+E30. rfusclient.exe
+E31. Skype.exe
+E32. CVE-2018-8134
+E33. CVE-2021-34523
+E34. CVE-2021-26855
+E35. CVE-2020-3179
+E36. CVE-2021-31207
+E37. CVE-2021-26857
+E38. CVE-2018-8170
+E39. CVE-2020-3187
+E40. CVE-2021-32648
+E41. csrss.exe [aka csrss.exe (DoubleZero)]
+E42. spi.exe
+E43. sysm.exe
+E44. write.exe
+E45. Iclouding.exe
+E46. MSCommonDriver.exe
+E47. MSCommonDriver.DCRat.exe
+E48. ms-msdt.exe
+E49. rundll32.exe
+E50. CVE-2017-8759
+E51. CVE-2017-0199 [aka CVE-2017-0144]
+E52. CVE-2021-44228
+E53. CVE-2020-7047
+E54. curl.exe [aka curl]
+E55. MSCommondll.exe
+E56. CVE-2021-34473
+E57. CVE-2018-8141
+E58. CVE-2022-24521
+E59. MSDriverMonitor.exe
+E60. MSDriverLoader.exe
+E61. CVE-2018-8129
+E62. CVE-2018-8120
+E63. CVE-2018-0854
+E64. CVE-2018-8124
+E65. CVE-2018-0958
+E66. CVE-2018-8132
+E67. CVE-2018-13379
+E68. CVE-2018-8136
+E69. CVE-2020-3110
+E70. CVE-2022-21907
+E71. CVE-2020-3119
+E72. CVE-2022-23134
+E73. CVE-2022-23131
+E74. CVE-2020-3120
+E75. CVE-2017-17689
+E76. CVE-2020-3759
+E77. CVE-2017-11882
+E78. CVE-2017-17688
+E79. CVE-2017-14491
+E80. CVE-2018-8127
+E81. CVE-2018-20250
+E82. LoadEdge
+E83. major.exe
+E84. GzipLoader
+E85. CVE-2020-0601
+E86. CVE-2020-0610
+E87. CVE-2020-0609
+E88. CVE-2020-3111
+E89. CVE-2020-0611
+E90. CVE-2022-30190
+E91. CVE-2020-3196
+E92. icloud.cmd
+E93. IcloudSecurity.lnk
+E94. WINWORD.EXE
+E95. iclouds.cmd
+E96. CVE-2018-8174
+E97. RegAsm.exe
+E98. oracle-java.exe
+E99. CVE-2018-6882
+E100. CVE-2021-26858
+E101. CVE-2020-3760
+E102. WinExe
+E103. ESET_scanner.rar
+E104. eset.yar
+E105. Електронний запит.exe
+E106. UkrScanner.exe (SFX)
+E107. CodeMeter.exe
+E108. installer.exe
+E109. UkrScanner.rar
+E110. Microsoft Safety Scanner
+E111. CVE-2018-20251
+E112. CVE-2018-20252
+E113. HTM dropper
+E114. DropMeFiles
+E115. CVE-2021-27065
+E116. http-vuln-cve2021-26855.nse
+E117. CVE-2020-3255
+E118. CVE-2020-3757
+E119. CVE-2020-3125
+E120. CVE-2020-3259
+E121. CVE-2019-17666
+E122. Windows Server 2019
+E123. formbook.exe [aka Formbook]
+E124. GrimPlant
+E125. baseupd.exe
+E126. CVE-2020-3283
+E127. CVE-2020-3189
+E128. Smokeloader
+E129. Ursnif
+E130. LightRope_v2
+E131. Snake Keylogger
+E132. GoDownloader
+E133. CredoMap_v2 [aka scan.exe (CredoMap_v2)]
+Mentions:
+M1. "Remote Utilities" (Software) — options: E1, E2, E3, E4
+M2. "KB5017371.exe" (Software) — options: E10, E11, E12, E13
+M3. "BitdefenderWindowsUpdatePackage.exe" (Software) — options: E19, E11, E20, E10
+M4. "installer.exe" (Software) — options: E22, E23, E12, E24
+M5. "baseupd.exe" (Software) — options: E20, E11, E28, E29
+M6. "CVE-2021-34473" (Software) — options: E32, E33, E34, E35
+M7. "Skype.exe" (Software) — options: E41, E42, E15, E11
+M8. "MSCommondll.exe" (Software) — options: E46, E11, E41, E47
+M9. "CVE-2021-40444" (Software) — options: E50, E51, E52, E34
+M10. "sgegkseg23mjl.exe" (Software) — options: E26, E11, E54, E13
+M11. "CVE-2021-34523" (Software) — options: E56, E34, E32, E52
+M12. "MSCommonDriver.exe" (Software) — options: E59, E47, E30, E55
+M13. "CVE-2018-8127" (Software) — options: E61, E62, E63, E64
+M14. "CVE-2022-30190" (Software) — options: E50, E69, E70, E66
+M15. "CVE-2017-8759" (Software) — options: E38, E75, E76, E51
+M16. "CVE-2022-24521" (Software) — options: E64, E33, E72, E70
+M17. "CVE-2018-8124" (Software) — options: E80, E62, E63, E61
+M18. "loader.exe" (Software) — options: E60, E25, E11, E26
+M19. "MSDriverLoader.exe" (Software) — options: E59, E24, E11, E46
+M20. "CVE-2017-0199" (Software) — options: E50, E38, E77, E61
+M21. "CVE-2020-0611" (Software) — options: E38, E85, E86, E80
+M22. "CVE-2020-0610" (Software) — options: E63, E65, E89, E85
+M23. "CVE-2022-21907" (Software) — options: E33, E36, E90, E73
+M24. "CVE-2018-8120" (Software) — options: E64, E61, E63, E80
+M25. "CVE-2018-8129" (Software) — options: E80, E62, E63, E64
+M26. "Icloud.exe" (Software) — options: E45, E92, E93, E11
+M27. "inject.exe" (Software) — options: E27, E15, E19, E11
+M28. "CVE-2018-8136" (Software) — options: E32, E66, E63, E65
+M29. "CVE-2018-8134" (Software) — options: E68, E64, E63, E66
+M30. "icacls.exe" (Software) — options: E18, E29, E41, E11
+M31. "CVE-2017-11882" (Software) — options: E50, E38, E78, E51
+M32. "CVE-2018-8132" (Software) — options: E68, E32, E63, E65
+M33. "MSDriverMonitor.exe" (Software) — options: E46, E60, E11, E30
+M34. "CVE-2021-27065" (Software) — options: E80, E63, E34, E100
+M35. "wisw.exe" (Software) — options: E26, E44, E102, E11
+M36. "ESET Online Scanner.exe" (Software) — options: E103, E104, E60, E105
+M37. "CVE-2018-8170" (Software) — options: E32, E62, E96, E63
+M38. "CVE-2018-0854" (Software) — options: E65, E32, E81, E67
+M39. "CVE-2018-8141" (Software) — options: E32, E62, E63, E68
+M40. "dropper.exe" (Software) — options: E44, E24, E113, E22
+M41. "CVE-2021-26855" (Software) — options: E100, E56, E37, E33
+M42. "CVE-2018-8174" (Software) — options: E38, E32, E64, E63
+M43. "CVE-2021-26857" (Software) — options: E100, E36, E34, E56
+M44. "CVE-2021-31207" (Software) — options: E33, E74, E34, E56
+M45. "CVE-2021-26858" (Software) — options: E33, E34, E56, E37
+M46. "CVE-2020-0601" (Software) — options: E119, E87, E61, E89
+M47. "CVE-2018-8897" (Software) — options: E61, E80, E62, E63
+M48. "CVE-2019-0708" (Software) — options: E32, E65, E121, E66
+M49. "java-sdk.exe" (Software) — options: E25, E98, E97, E123
+M50. "CVE-2018-0958" (Software) — options: E63, E57, E81, E67
+M51. "CVE-2020-0609" (Software) — options: E120, E117, E85, E119
+M52. "Formbook/XLoader v2.5" (Software) — options: E123, E128, E129, E24
+
+=== RESPONSE (66.6s, in 5120 / out 7806 tok, stop) ===
+{"v":[{"m":"Remote Utilities","id":"E1","g":null,"p":null,"r":null},{"m":"KB5017371.exe","id":"NEW","g":"Windows security update executable","p":null,"r":null},{"m":"BitdefenderWindowsUpdatePackage.exe","id":"NEW","g":"Bitdefender update package executable","p":null,"r":null},{"m":"installer.exe","id":"NEW","g":"installation executable","p":null,"r":null},{"m":"baseupd.exe","id":"NEW","g":"update executable","p":null,"r":null},{"m":"CVE-2021-34473","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"Skype.exe","id":"NEW","g":"Skype executable","p":null,"r":null},{"m":"MSCommondll.exe","id":"NEW","g":"common DLL executable","p":null,"r":null},{"m":"CVE-2021-40444","id":"NEW","g":"vulnerability in Microsoft Office","p":null,"r":null},{"m":"sgegkseg23mjl.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"CVE-2021-34523","id":"E33","g":null,"p":null,"r":null},{"m":"MSCommonDriver.exe","id":"NEW","g":"common driver executable","p":null,"r":null},{"m":"CVE-2018-8127","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2022-30190","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2017-8759","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2022-24521","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-8124","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"loader.exe","id":"NEW","g":"loader executable","p":null,"r":null},{"m":"MSDriverLoader.exe","id":"NEW","g":"driver loader executable","p":null,"r":null},{"m":"CVE-2017-0199","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2020-0611","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2020-0610","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2022-21907","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-8120","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-8129","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"Icloud.exe","id":"NEW","g":"iCloud executable","p":null,"r":null},{"m":"inject.exe","id":"NEW","g":"injection executable","p":null,"r":null},{"m":"CVE-2018-8136","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-8134","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"icacls.exe","id":"NEW","g":"icacls executable","p":null,"r":null},{"m":"CVE-2017-11882","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-8132","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"MSDriverMonitor.exe","id":"NEW","g":"driver monitor executable","p":null,"r":null},{"m":"CVE-2021-27065","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"wisw.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"ESET Online Scanner.exe","id":"NEW","g":"ESET online scanner executable","p":null,"r":null},{"m":"CVE-2018-8170","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-0854","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-8141","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"dropper.exe","id":"NEW","g":"dropper executable","p":null,"r":null},{"m":"CVE-2021-26855","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-8174","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2021-26857","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2021-31207","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2021-26858","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2020-0601","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2018-8897","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2019-0708","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"java-sdk.exe","id":"NEW","g":"Java SDK executable","p":null,"r":null},{"m":"CVE-2018-0958","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"CVE-2020-0609","id":"NEW","g":"vulnerability in Microsoft Windows","p":null,"r":null},{"m":"Formbook/XLoader v2.5","id":"NEW","g":"version 2.5 of the Formbook malware","p":"E123","r":"v"}]}

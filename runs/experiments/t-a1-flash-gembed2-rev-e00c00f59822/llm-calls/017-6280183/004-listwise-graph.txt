@@ -1,0 +1,99 @@
+=== REQUEST (gemini gemini-3.7-flash) ===
+--- sampling ---
+{"temperature":0}
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 24 canonicals"
+Entities:
+E1. державні органи та органи місцевого самоврядування України
+E2. державні організації [aka державна організація]
+E3. Українські підприємства та організації
+E4. Військовослужбовці України
+E5. Нотаріуси України
+E6. органи державної влади
+E7. органи місцевого самоврядування
+E8. оборонні відомства інших країн
+E9. Ukrainian logistics companies
+E10. військовослужбовці
+E11. Державні органи України
+E12. військові формування
+E13. установи судово-медичної експертизи
+E14. Бухгалтери підприємств
+E15. підприємства основних галузей промисловості
+E16. підприємств оборонно-промислового комплексу [aka Підприємства оборонно-промислового комплексу]
+E17. Ukrainian enterprises and sole proprietors
+E18. Ukrainian grain handling equipment manufacturers
+E19. Industrial control systems integrators (АСУТП developers)
+E20. Energy sector
+E21. Water supply sector
+E22. Heat supply sector
+E23. заводи
+E24. лісництва
+Mentions:
+M1. "Державні органи України" (Sector) — options: E1, E2, E3, E4
+M2. "Військовослужбовці України" (Sector) — options: E10, E11, E5, E12
+M3. "Українські підприємства та організації" (Sector) — options: E11, E2, E4, E14
+M4. "державні органи та органи місцевого самоврядування України" (Sector) — options: E7, E11, E6, E2
+M5. "державні організації" (Sector) — options: E6, E11, E3, E1
+M6. "Нотаріуси України" (Sector) — options: E11, E4, E3, E8
+M7. "військові формування" (Sector) — options: E10, E4, E16, E7
+M8. "оборонні відомства інших країн" (Sector) — options: E16, E11, E2, E5
+M9. "Ukrainian enterprises and sole proprietors" (Sector) — options: E9, E18, E3, E19
+M10. "Ukrainian grain handling equipment manufacturers" (Sector) — options: E9, E17, E19, E21
+M11. "підприємств оборонно-промислового комплексу" (Sector) — options: E15, E14, E23, E2
+M12. "лісництва" (Sector) — options: E10, E12, E8, E7
+M13. "Бухгалтери підприємств" (Sector) — options: E3, E16, E15, E21
+M14. "заводи" (Sector) — options: E15, E6, E16, E11
+M15. "підприємства основних галузей промисловості" (Sector) — options: E16, E3, E10, E14
+M16. "Industrial control systems integrators (АСУТП developers)" (Sector) — options: E18, E17, E23, E9
+
+=== RESPONSE (7.3s, in 2213 / out 413 tok, STOP) ===
+{"v":[{"m":"M1","id":"NEW","g":"state government bodies of Ukraine","p":"E6","r":"n"},{"m":"M2","id":"NEW","g":"military personnel of Ukraine","p":"E10","r":"n"},{"m":"M3","id":"NEW","g":"Ukrainian enterprises and organizations","p":null,"r":null},{"m":"M4","id":"NEW","g":"state and local self-government bodies of Ukraine","p":null,"r":null},{"m":"M5","id":"NEW","g":"state organizations","p":null,"r":null},{"m":"M6","id":"NEW","g":"notaries of Ukraine","p":null,"r":null},{"m":"M7","id":"NEW","g":"military formations","p":null,"r":null},{"m":"M8","id":"NEW","g":"defense agencies of foreign countries","p":null,"r":null},{"m":"M9","id":"NEW","g":"Ukrainian enterprises and individual entrepreneurs","p":null,"r":null},{"m":"M10","id":"NEW","g":"manufacturers of grain handling equipment in Ukraine","p":"E17","r":"n"},{"m":"M11","id":"NEW","g":"defense industry enterprises","p":"E15","r":"n"},{"m":"M12","id":"NEW","g":"forestry enterprises or districts","p":null,"r":null},{"m":"M13","id":"NEW","g":"company accountants","p":null,"r":null},{"m":"M14","id":"NEW","g":"factories and manufacturing plants","p":null,"r":null},{"m":"M15","id":"NEW","g":"enterprises of key industrial sectors","p":null,"r":null},{"m":"M16","id":"NEW","g":"developers and integrators of industrial control systems","p":null,"r":null}]}

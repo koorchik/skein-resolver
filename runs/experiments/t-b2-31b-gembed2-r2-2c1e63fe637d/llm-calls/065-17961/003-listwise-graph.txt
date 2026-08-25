@@ -1,0 +1,272 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 339 canonicals"
+Entities:
+E1. CVE-2020-3196
+E2. CVE-2020-3110
+E3. CVE-2018-20251 [aka CVE-2018-20252]
+E4. CVE-2017-0144
+E5. CVE-2020-3120
+E6. CVE-2018-20250
+E7. CVE-2020-3187
+E8. CVE-2018-20253
+E9. CVE-2017-0199
+E10. IIS [aka IIS (Internet Information Services)]
+E11. Processor Graphics
+E12. Газпромбанк заказ.js
+E13. Remote Desktop Protocol (RDP)
+E14. Cisco Discovery Protocol (CDP)
+E15. Windows Host Compute Service Shim
+E16. Windows SMBv1
+E17. SMB протокол
+E18. http-vuln-cve2021-26855.nse
+E19. Windows 7
+E20. Windows 10
+E21. Windows Server 2008
+E22. Windows [aka Microsoft Windows]
+E23. Windows 2008 R2
+E24. Windows Server 2019
+E25. CVE-2018-8129
+E26. Windows Server 2012
+E27. CVE-2021-26858
+E28. CVE-2021-26857
+E29. CVE-2021-27065
+E30. CVE-2018-8134
+E31. CVE-2020-3255
+E32. CVE-2021-32648
+E33. CVE-2018-8127
+E34. CVE-2018-8132
+E35. CVE-2021-26855
+E36. CVE-2020-3757
+E37. CVE-2017-17688
+E38. CVE-2020-3259
+E39. CVE-2020-0601
+E40. CVE-2020-3125
+E41. CVE-2020-0610
+E42. CVE-2020-3283
+E43. CVE-2020-0611
+E44. CVE-2020-3189
+E45. CVE-2020-3119
+E46. CVE-2018-0854
+E47. CVE-2020-3760
+E48. CVE-2020-7047
+E49. CVE-2018-0958
+E50. CVE-2019-17666
+E51. CVE-2017-17689
+E52. CVE-2020-3191
+E53. CVE-2020-3179
+E54. CVE-2020-0609
+E55. CVE-2018-8170
+E56. CVE-2018-8136
+E57. CVE-2020-3111
+E58. CVE-2018-8124
+E59. CVE-2020-3195
+E60. CVE-2017-14491
+E61. CVE-2017-11882
+E62. CVE-2017-8759
+E63. CVE-2020-3118
+E64. CVE-2018-8120
+E65. CVE-2018-8141
+E66. CVE-2018-8174
+E67. CVE-2020-3254
+E68. CVE-2020-3759
+E69. CVE-2020-3298
+E70. CVE-2020-7048
+E71. CVE-2019-0708
+E72. CVE-2018-7600
+E73. Cisco IOS XE
+E74. Cisco FXOS
+E75. Cisco Adaptive Security Appliance (ASA) Software
+E76. Cisco IOS XR
+E77. Cisco Firepower Threat Defense (FTD) Software
+E78. iOS
+E79. Cisco NX-OS
+E80. iOS Mail
+E81. DROWN (CVE-2016-0800)
+E82. Logjam (CVE-2015-4000)
+E83. Heartbleed (CVE-2014-0160)
+E84. POODLE (CVE-2014-3566)
+E85. SSL 3.0
+E86. FREAK (CVE-2015-0204)
+E87. sserv.jpg
+E88. OpenSSL
+E89. Qualys SSL Client Test
+E90. RWC 3 for Windows
+E91. ssj.jpg
+E92. anketa_21_3_2018 (4).js
+E93. cmd.exe
+E94. csrss.exe
+E95. spi.exe
+E96. 223329.exe
+E97. 62ea.exe
+E98. PowerShell [aka powershell.exe]
+E99. ckZ89.ExE
+E100. sysm.exe
+E101. 966449.exe
+E102. Microsoft Office 2016 [aka Office 2016]
+E103. Windows Server 2016
+E104. Microsoft Exchange Server 2016
+E105. SNMP Subagent Stand-Alone for Windows
+E106. Microsoft Windows 7 for x64-based Systems SP1
+E107. Microsoft Office Services and Web Apps
+E108. Misha
+E109. S/MIME
+E110. Zimbra
+E111. timeout.exe
+E112. Заявка.js
+E113. Microsoft Edge
+E114. Agent Tesla
+E115. Windows 10 version 1809
+E116. Windows Vista
+E117. explorer.exe
+E118. major.exe
+E119. rutserv.exe
+E120. CVE-2018-7602
+E121. watchOS
+E122. iPadOS
+E123. VMRC для Mac
+E124. Apple Mail
+E125. tvOS
+E126. ChakraCore
+E127. Cisco IOS
+E128. Icloud.exe
+E129. IcloudSecurity.lnk
+E130. icloud.cmd
+E131. iclouds.cmd
+E132. rfusclient.exe
+E133. WinExe
+E134. Liebao Browser
+E135. nginx
+E136. ./decpded_page.html
+E137. Apache
+E138. Win32k
+E139. ./перевірити діяльність.html
+E140. Drupalgeddon2
+Mentions:
+M1. "CVE-2022-21907" (Software) — options: E1, E2, E3, E4
+M2. "HTTP Protocol Stack (http.sys)" (Software) — options: E10, E11, E12, E13
+M3. "Windows 10 version 1809" (Software) — options: E19, E20, E16, E21
+M4. "CVE-2021-26855" (Software) — options: E27, E28, E29, E18
+M5. "CVE-2021-26857" (Software) — options: E35, E27, E29, E7
+M6. "CVE-2021-26858" (Software) — options: E35, E29, E28, E32
+M7. "CVE-2020-0609" (Software) — options: E38, E31, E39, E40
+M8. "CVE-2021-27065" (Software) — options: E33, E35, E27, E46
+M9. "CVE-2019-0708" (Software) — options: E4, E49, E50, E30
+M10. "CVE-2020-3195" (Software) — options: E1, E7, E40, E52
+M11. "CVE-2020-0611" (Software) — options: E55, E33, E39, E41
+M12. "CVE-2020-0610" (Software) — options: E46, E49, E43, E39
+M13. "CVE-2020-3196" (Software) — options: E7, E52, E39, E53
+M14. "CVE-2017-0144" (Software) — options: E30, E9, E34, E60
+M15. "CVE-2020-3187" (Software) — options: E44, E39, E1, E2
+M16. "CVE-2020-3191" (Software) — options: E53, E1, E57, E59
+M17. "CVE-2017-0199" (Software) — options: E62, E4, E55, E61
+M18. "CVE-2018-8132" (Software) — options: E56, E30, E3, E46
+M19. "CVE-2020-3189" (Software) — options: E7, E45, E39, E1
+M20. "CVE-2018-8134" (Software) — options: E56, E58, E34, E3
+M21. "CVE-2018-8127" (Software) — options: E25, E64, E3, E58
+M22. "CVE-2020-3259" (Software) — options: E31, E67, E39, E42
+M23. "CVE-2018-8120" (Software) — options: E58, E25, E3, E33
+M24. "CVE-2018-8136" (Software) — options: E30, E34, E3, E46
+M25. "CVE-2020-3255" (Software) — options: E38, E67, E39, E42
+M26. "CVE-2020-3298" (Software) — options: E42, E38, E63, E39
+M27. "CVE-2018-8129" (Software) — options: E33, E64, E3, E58
+M28. "CVE-2018-8170" (Software) — options: E30, E64, E66, E3
+M29. "CVE-2020-7047" (Software) — options: E42, E40, E70, E39
+M30. "CVE-2018-8141" (Software) — options: E30, E64, E3, E56
+M31. "CVE-2020-3179" (Software) — options: E40, E45, E2, E39
+M32. "CVE-2020-3283" (Software) — options: E53, E7, E38, E39
+M33. "CVE-2020-3254" (Software) — options: E38, E31, E39, E42
+M34. "CVE-2018-0854" (Software) — options: E49, E3, E30, E6
+M35. "CVE-2017-11882" (Software) — options: E62, E55, E37, E51
+M36. "CVE-2020-3119" (Software) — options: E53, E40, E2, E39
+M37. "CVE-2018-8124" (Software) — options: E33, E64, E3, E25
+M38. "CVE-2017-8759" (Software) — options: E55, E51, E68, E4
+M39. "CVE-2020-3120" (Software) — options: E40, E53, E2, E39
+M40. "CVE-2020-3118" (Software) — options: E53, E40, E2, E39
+M41. "CVE-2020-0601" (Software) — options: E40, E25, E54, E38
+M42. "CVE-2020-3759" (Software) — options: E38, E53, E36, E39
+M43. "CVE-2020-3125" (Software) — options: E53, E5, E39, E42
+M44. "CVE-2019-17666" (Software) — options: E42, E40, E37, E71
+M45. "CVE-2020-7048" (Software) — options: E42, E40, E48, E39
+M46. "CVE-2020-3757" (Software) — options: E42, E53, E68, E39
+M47. "CVE-2020-3110" (Software) — options: E53, E40, E57, E63
+M48. "CVE-2021-32648" (Software) — options: E42, E67, E27, E35
+M49. "CVE-2020-3111" (Software) — options: E53, E40, E2, E39
+M50. "CVE-2018-8174" (Software) — options: E55, E30, E58, E3
+M51. "CVE-2018-0958" (Software) — options: E46, E3, E65, E6
+M52. "CVE-2020-3741" (Software) — options: E53, E42, E57, E68
+M53. "CVE-2020-3760" (Software) — options: E53, E42, E2, E68
+M54. "Cisco IOS" (Software) — options: E73, E74, E75, E76
+M55. "CVE-2018-8897" (Software) — options: E25, E33, E64, E3
+M56. "FREAK (CVE-2015-0204)" (Software) — options: E81, E82, E3, E83
+M57. "Logjam (CVE-2015-4000)" (Software) — options: E86, E81, E3, E83
+M58. "Heartbleed (CVE-2014-0160)" (Software) — options: E81, E84, E86, E4
+M59. "SSL 3.0" (Software) — options: E86, E87, E88, E89
+M60. "curl.exe" (Software) — options: E93, E94, E95, E96
+M61. "DROWN (CVE-2016-0800)" (Software) — options: E86, E82, E102, E83
+M62. "Chipset Device Software" (Software) — options: E11, E77, E75, E105
+M63. "Mimikatz" (Software) — options: E16, E108, E109, E110
+M64. "CVE-2017-14491" (Software) — options: E4, E40, E9, E51
+M65. "Windows" (Software) — options: E19, E20, E23, E115
+M66. "CVE-2018-20250" (Software) — options: E38, E46, E3, E8
+M67. "CVE-2018-20253" (Software) — options: E46, E6, E3, E38
+M68. "installer.exe" (Software) — options: E95, E96, E117, E99
+M69. "CVE-2017-17689" (Software) — options: E46, E60, E37, E4
+M70. "CVE-2018-20251" (Software) — options: E6, E46, E8, E49
+M71. "macOS" (Software) — options: E121, E80, E78, E122
+M72. "Iclouding.exe" (Software) — options: E128, E96, E129, E130
+M73. "CVE-2017-17688" (Software) — options: E46, E49, E51, E4
+M74. "Linux" (Software) — options: E22, E133, E134, E127
+M75. "CVE-2018-7602" (Software) — options: E72, E3, E140, E34
+
+=== RESPONSE (101.5s, in 6119 / out 10503 tok, stop) ===
+{"v":[{"m":"CVE-2022-21907","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"HTTP Protocol Stack (http.sys)","id":"NEW","g":"Windows HTTP stack component","p":"E22","r":"p"},{"m":"Windows 10 version 1809","id":"NEW","g":"a specific version of Windows 10","p":"E20","r":"v"},{"m":"CVE-2021-26855","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2021-26857","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2021-26858","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-0609","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2021-27065","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2019-0708","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3195","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-0611","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-0610","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3196","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2017-0144","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3187","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3191","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2017-0199","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8132","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3189","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8134","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8127","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3259","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8120","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8136","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3255","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3298","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8129","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8170","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-7047","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8141","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3179","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3283","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3254","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-0854","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2017-11882","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3119","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8124","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2017-8759","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3120","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3118","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-0601","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3759","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3125","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2019-17666","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-7048","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3757","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3110","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2021-32648","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3111","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-8174","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-0958","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3741","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3760","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"Cisco IOS","id":"NEW","g":"Cisco network operating system","p":null,"r":null},{"m":"CVE-2018-8897","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"FREAK (CVE-2015-0204)","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"Logjam (CVE-2015-4000)","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"Heartbleed (CVE-2014-0160)","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"SSL 3.0","id":"NEW","g":"security protocol","p":null,"r":null},{"m":"curl.exe","id":"NEW","g":"command-line tool for transferring data","p":null,"r":null},{"m":"DROWN (CVE-2016-0800)","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"Chipset Device Software","id":"NEW","g":"hardware driver software","p":null,"r":null},{"m":"Mimikatz","id":"NEW","g":"credential stealing tool","p":null,"r":null},{"m":"CVE-2017-14491","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"Windows","id":"NEW","g":"Microsoft operating system","p":null,"r":null},{"m":"CVE-2018-20250","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-20253","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"installer.exe","id":"NEW","g":"installation executable","p":null,"r":null},{"m":"CVE-2017-17689","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2018-20251","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"macOS","id":"NEW","g":"Apple operating system","p":null,"r":null},{"m":"Iclouding.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"CVE-2017-17688","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"Linux","id":"NEW","g":"open-source operating system","p":null,"r":null},{"m":"CVE-2018-7602","id":"NEW","g":"vulnerability","p":null,"r":null}]}

@@ -1,0 +1,354 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 1658 canonicals"
+Entities:
+E1. t-online.de
+E2. prozorro.online
+E3. hsts.online [aka www.hsts.online]
+E4. group-teneta.online
+E5. mxukr.net
+E6. truffa.online
+E7. authssl.online
+E8. internet.bs
+E9. com.ssl3.online [aka ssl3.online, net.ssl3.online]
+E10. telecomds.online
+E11. com.ssl4.online [aka ssl4.online]
+E12. ssl2.online
+E13. awsplatform.online
+E14. trust-certificate.net
+E15. www.authssl.online
+E16. com.authssl.online
+E17. ns1.authssl.online
+E18. ns2.authssl.online
+E19. ssl1.online
+E20. authssl.link
+E21. authssl.org
+E22. googie.com.authssl.online
+E23. swinj.online
+E24. jimloamfilling.online
+E25. gondurasonline.ru
+E26. online.ua
+E27. aws-online.cloud
+E28. co3ra.de
+E29. sackmeister.de
+E30. moolin.ru
+E31. military-ukraine.online
+E32. elyslink.online
+E33. edopomogaonline.yolasite.com
+E34. gdrive.com.ssl2.online
+E35. googie.com.ssl3.online
+E36. net.ssl1.online
+E37. ukr.net.ssl1.online
+E38. edisk.ukr.net.ssl1.online
+E39. net.ssl1.site [aka ssl1.site]
+E40. vdsina.ru
+E41. a0322810.xsph.ru
+E42. a0695487.xsph.ru
+E43. hilr.ru
+E44. a0656203.xsph.ru
+E45. a0671524.xsph.ru
+E46. ardeas.ru
+E47. a0667987.xsph.ru
+E48. a0698262.xsph.ru
+E49. aws-ukraine.cloud [aka us-west-1.aws-ukraine.cloud]
+E50. aws-meet.cloud [aka aws-meetings.cloud]
+E51. us-east-console.awsplatform.online
+E52. aws-join.cloud
+E53. aws-il.cloud
+E54. aws-s3.cloud [aka s3-aws.cloud]
+E55. ca-central-1.awsplatform.online
+E56. aws-data.cloud
+E57. xmr.2miners.com
+E58. servegame.com
+E59. timeandbright.com
+E60. derzhposluhy.com [aka uspp.derzhposluhy.com]
+E61. 3utilities.com
+E62. rivertimad.com
+E63. mirotrent.com [aka plntr.mirotrent.com]
+E64. britxec.com
+E65. com.ssl2.online
+E66. net.ssl2.online
+E67. net.ssl2.site [aka ssl2.site]
+E68. ukr.net.ssl2.online
+E69. gdocs.com.ssl2.online
+E70. prozorro-ua.net
+E71. courtbox.online
+E72. wasabiwallet.online
+E73. githubusercontent.com
+E74. shormanz.com
+E75. file.io
+E76. aspx.io
+E77. propertyiran.ir
+E78. censys.io
+E79. aneria.net
+E80. frge.io
+E81. nv.ua
+E82. in-ukr.net
+E83. gondurasonline.ug
+E84. meta.ua
+E85. aten.ua
+E86. comperssw.fun
+E87. googie.com.ssl4.online
+E88. net.ssl4.online
+E89. ukr.net.ssl4.online
+E90. docs.googie.com.ssl4.online
+E91. ssl4.site [aka www.ssl4.site]
+E92. mediaplatformapharm.ru
+E93. chimeramarket24.online
+E94. gir.network
+E95. internetcygane.ru
+E96. baletnet.eu
+E97. int-ukr.net
+E98. sb-ukr.net
+E99. ifastnet.com
+E100. inter-webservices.com
+E101. bh-ukr.net
+E102. brunoboys.net
+E103. redirectme.net
+E104. dwservice.net [aka www.dwservice.net]
+E105. aleimportadora.net
+E106. www.pierreagencement.fr
+E107. filebin.net
+E108. let-me.network
+E109. plengreg.fun
+E110. pge-ukr.net
+E111. ukr.net
+E112. v-ukr.net
+E113. blinkij.com
+E114. apitelegram.org
+E115. gbshost.org
+E116. cloudlnk.org
+E117. myftp.org
+E118. podologaneri.it
+E119. nafillimonilini.net
+E120. balerina.info
+E121. malvy-ukriane.info
+E122. ssl3.site
+E123. ukr.net.ssl3.online
+E124. docs.googie.com.ssl3.online
+E125. share.ukr.net.ssl3.online
+E126. bounceme.net
+E127. armpress.net
+E128. hopentools.ru
+E129. hopentools.site
+E130. davincigroup.online
+E131. metallergroup.ru
+E132. freeusadatingxxx.online
+E133. coudzoom.ru
+E134. abracodabugalimpopo.ru
+E135. milotraf.ru
+E136. infomailforyoumak.ru [aka kismamabeforyougo.ru]
+E137. civh.ru
+E138. againandagaingmorder.ru
+E139. minef.eu
+E140. agentsuperpupervinil.ru
+E141. krasavchikoleg.net
+E142. sytes.net
+E143. ddns.net
+E144. site-ukr.net
+E145. tools.nexcess.net
+E146. whoer.net
+E147. t.co
+E148. tgeo.link
+E149. tg-me.pro
+E150. s3-stig.cloud
+E151. hmgo.pw
+E152. govtr.cloud
+E153. ukenlog.com
+E154. finformservice.com
+E155. documentreader.net
+E156. ser-ukr.net
+E157. nabufixservice.name
+E158. emtserviceca.info
+E159. nabufixservice.su
+E160. beget.com
+E161. zarabovannyok.eu
+E162. deti.eu
+E163. hudojnik.eu [aka hudojniku.eu]
+E164. mouseoiet.fun
+E165. baletki.eu
+E166. filedn.eu
+E167. grabify.link
+E168. me-cloud.link
+E169. telegram.org-a0dm91dk31i.cloue.link
+E170. claud.in
+E171. ssl2.link
+E172. bloockflad.pw
+E173. goaccount.link
+E174. cdn.discordapp.com
+E175. autodoka.com.ua
+E176. account.associates [aka telegram.account.associates]
+E177. mail-box.site
+E178. shodan.io
+E179. balletmasters.co
+E180. nirsoft.me
+E181. m-vz.webhop.me
+E182. webhook.site
+E183. 7tt.me
+E184. it-develop.me
+E185. i1t.me
+E186. myddns.me
+E187. t.me
+E188. servehttp.com
+E189. xbeta.online
+E190. courtgova.online
+E191. billiopa.com
+E192. zakolibal.online
+E193. nikotod.ru
+E194. milotrad.ru
+E195. zaikadoctor.ru
+E196. unayt.ru
+E197. center-gos.top
+E198. ceriossl.info
+E199. central-gos.top
+E200. gofile.io
+E201. files-ukr.net
+E202. files.ukr.net.ssl2.in
+E203. plexbd.net
+E204. t--t.me
+E205. 0-t.me
+E206. 4-t.me
+E207. t-me.io
+E208. d-upl.ddns.net
+E209. datagroup.ddns.net
+E210. ddnsking.com
+E211. ln-upl.ddns.net
+E212. star-cz.ddns.net
+E213. freedynamicdns.net
+E214. viewdns.net
+E215. domtern.com
+E216. blakejones.xyz
+E217. devtools.bond
+E218. uacompensation.xyz
+E219. uatax-compens.xyz
+E220. ec-compensation.xyz
+E221. diplombar.by
+E222. let-me.life
+E223. let-me.world
+E224. balet-me.info
+E225. balet-me.pro
+E226. balet-me.us
+E227. kitten-268.frge.io
+E228. net.frge.io
+E229. ukr.net.frge.io
+E230. _.ukr.net.frge.io
+E231. mail-gov-ua.frge.io
+E232. gbshost.net
+E233. igshop.net
+E234. iqhost.ru
+E235. xcasinobonuses.net
+E236. bluepablo.fun
+E237. ua.aspx.io
+E238. aspe.ro
+E239. mil.ua.aspx.io
+E240. get.adobe.com.aspx.io
+E241. gov.mil.ua.aspx.io
+E242. www.get.adobe.com.aspx.io
+E243. raw.githubusercontent.com
+E244. geroiua.com
+E245. gobits3.com
+E246. easternexecutiveclub.com
+Mentions:
+M1. "xbeta.online" (Domain) — options: E1, E2, E3, E4
+M2. "hsts.online" (Domain) — options: E1, E8, E9, E10
+M3. "authssl.online" (Domain) — options: E15, E16, E17, E1
+M4. "elyslink.online" (Domain) — options: E1, E23, E12, E3
+M5. "t-online.de" (Domain) — options: E25, E26, E27, E28
+M6. "telecomds.online" (Domain) — options: E1, E32, E3, E33
+M7. "ssl1.online" (Domain) — options: E1, E9, E36, E11
+M8. "xsph.ru" (Domain) — options: E40, E41, E42, E43
+M9. "aws-online.cloud" (Domain) — options: E13, E49, E50, E51
+M10. "xeontime.com" (Domain) — options: E57, E58, E59, E60
+M11. "ssl2.online" (Domain) — options: E1, E9, E65, E66
+M12. "prozorro.online" (Domain) — options: E1, E70, E24, E71
+M13. "shodan.io" (Domain) — options: E73, E74, E75, E76
+M14. "online.ua" (Domain) — options: E81, E82, E1, E83
+M15. "swinj.online" (Domain) — options: E2, E9, E12, E3
+M16. "com.ssl4.online" (Domain) — options: E1, E65, E87, E88
+M17. "awsplatform.online" (Domain) — options: E51, E55, E27, E7
+M18. "internet.bs" (Domain) — options: E94, E95, E79, E96
+M19. "bounceme.net" (Domain) — options: E79, E102, E103, E104
+M20. "plexbd.net" (Domain) — options: E79, E107, E109, E104
+M21. "bitbucket.org" (Domain) — options: E73, E113, E114, E115
+M22. "aneria.net" (Domain) — options: E5, E107, E118, E104
+M23. "com.ssl3.online" (Domain) — options: E122, E65, E35, E1
+M24. "tools.nexcess.net" (Domain) — options: E8, E126, E127, E104
+M25. "groupdavinci.online" (Domain) — options: E2, E4, E130, E3
+M26. "xcqef.ru" (Domain) — options: E133, E134, E135, E136
+M27. "xcasinobonuses.net" (Domain) — options: E5, E105, E102, E104
+M28. "sytes.net" (Domain) — options: E107, E144, E143, E104
+M29. "tg.cyou" (Domain) — options: E147, E137, E148, E149
+M30. "dwservice.net" (Domain) — options: E107, E79, E154, E105
+M31. "bihei.eu" (Domain) — options: E160, E161, E139, E162
+M32. "cloue.link" (Domain) — options: E167, E168, E169, E73
+M33. "mastodon.social" (Domain) — options: E73, E174, E175, E176
+M34. "webhop.me" (Domain) — options: E181, E180, E182, E183
+M35. "truffa.online" (Domain) — options: E2, E189, E3, E1
+M36. "courtbox.online" (Domain) — options: E177, E190, E3, E2
+M37. "wasabiwallet.online" (Domain) — options: E1, E192, E66, E3
+M38. "nxkad.ru" (Domain) — options: E40, E193, E194, E136
+M39. "censys.io" (Domain) — options: E180, E76, E197, E198
+M40. "filebin.net" (Domain) — options: E200, E166, E201, E104
+M41. "t.me" (Domain) — options: E147, E204, E184, E205
+M42. "jimloamfilling.online" (Domain) — options: E1, E32, E12, E3
+M43. "ddns.net" (Domain) — options: E208, E209, E210, E211
+M44. "domthr.xyz" (Domain) — options: E215, E216, E217, E218
+M45. "let-me.network" (Domain) — options: E94, E222, E223, E8
+M46. "frge.io" (Domain) — options: E94, E227, E228, E73
+M47. "t-me.io" (Domain) — options: E184, E204, E224, E180
+M48. "dcshost.net" (Domain) — options: E104, E232, E79, E233
+M49. "brunoboys.net" (Domain) — options: E79, E126, E235, E104
+M50. "aspx.io" (Domain) — options: E237, E104, E238, E239
+M51. "github.com" (Domain) — options: E73, E243, E64, E60
+
+=== RESPONSE (43.8s, in 6090 / out 8455 tok, stop) ===
+{"v":[{"m":"xbeta.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"hsts.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"authssl.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"elyslink.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"t-online.de","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"telecomds.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"ssl1.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"xsph.ru","id":"NEW","g":"a domain hosting various subdomains","p":"E41","r":"b"},{"m":"aws-online.cloud","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"xeontime.com","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"ssl2.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"prozorro.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"shodan.io","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"online.ua","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"swinj.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"com.ssl4.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"awsplatform.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"internet.bs","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"bounceme.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"plexbd.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"bitbucket.org","id":"NEW","g":"a software hosting platform","p":null,"r":null},{"m":"aneria.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"com.ssl3.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"tools.nexcess.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"groupdavinci.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"xcqef.ru","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"xcasinobonuses.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"sytes.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"tg.cyou","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"dwservice.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"bihei.eu","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"cloue.link","id":"NEW","g":"a domain hosting various subdomains","p":"E169","r":"b"},{"m":"mastodon.social","id":"NEW","g":"a decentralized social networking service","p":null,"r":null},{"m":"webhop.me","id":"NEW","g":"a domain hosting various subdomains","p":"E181","r":"b"},{"m":"truffa.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"courtbox.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"wasabiwallet.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"nxkad.ru","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"censys.io","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"filebin.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"t.me","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"jimloamfilling.online","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"ddns.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"domthr.xyz","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"let-me.network","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"frge.io","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"t-me.io","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"dcshost.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"brunoboys.net","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"aspx.io","id":"NEW","g":"a domain name","p":null,"r":null},{"m":"github.com","id":"NEW","g":"a software hosting platform","p":"E73","r":"b"}]}

@@ -1,0 +1,322 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 229 canonicals"
+Entities:
+E1. CVE-2020-0609
+E2. CVE-2020-0610
+E3. CVE-2020-0611
+E4. CVE-2020-7048
+E5. CVE-2018-7600
+E6. CVE-2020-7047
+E7. CVE-2018-7602
+E8. CVE-2022-30190
+E9. CVE-2017-17688
+E10. CVE-2020-0601
+E11. CVE-2022-21907
+E12. GreyEnergy
+E13. CVE-2023-38831
+E14. Windows 10 version 1809
+E15. Windows 7
+E16. Windows Server 2019
+E17. Usb
+E18. Windows 2008 R2
+E19. Microsoft Edge
+E20. Windows Server 2012
+E21. Windows Prefetch.lNk
+E22. Windows Server 2016
+E23. Windows 10
+E24. LiteManager Pro - Server
+E25. RDP Gateway Server
+E26. WinExe
+E27. SPECTR
+E28. SolarWinds Orion
+E29. RDP Wrapper [aka RDPWRAPPER]
+E30. desktop.ini
+E31. Remote Utilities
+E32. BORE
+E33. Dante
+E34. WP Database Reset
+E35. ROMServer.exe
+E36. Browsers
+E37. FileGrabber
+E38. spisok_24.08.2018.com
+E39. CVE-2017-17689
+E40. Drupalgeddon2
+E41. MicroBackdoor
+E42. POSEIDON
+E43. vbc.exe
+E44. wisw.exe
+E45. WINWORD.EXE
+E46. write.exe
+E47. weboffice.exe
+E48. WMIC
+E49. RAR [aka WinRAR]
+E50. P0wnyShell
+E51. VBScript
+E52. BitdefenderWindowsUpdatePackage.exe
+E53. alt.exe
+E54. CoronaMap.exe
+E55. timeout.exe
+E56. Icloud.exe
+E57. cmd.exe
+E58. MSDriverLoader.exe
+E59. mshta.exe [aka MSHTA]
+E60. SMBEXEC
+E61. base_update.exe
+E62. Iclouding.exe
+E63. MSDriverMonitor.exe
+E64. dropper.exe
+E65. LOADERX3
+E66. icloud.cmd
+E67. PowerShell
+E68. iclouds.cmd
+E69. one.exe
+E70. Microsoft Authenticator
+E71. regasm.exe
+E72. ROMFUSClient.exe
+E73. IcloudSecurity.lnk
+E74. 501_25_103.lnk
+E75. ignit.vbs
+E76. KB5017371.exe
+E77. Windows Remote Desktop Client
+E78. Telegram
+E79. Syncthing
+E80. PyInstaller
+E81. SpecMon
+E82. Robocopy
+E83. LOADNEST
+E84. gowitness
+E85. XWORM
+E86. wscript.exe
+E87. BACKSTAB
+E88. 1.Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.exe
+E89. MISP
+E90. 2.Витяг з реeстру вiд 24.07.2023р_Код документа 9312-0580-6944-3255.xls.js
+E91. NSSM
+E92. Google Authenticator
+E93. microsoft-cortana.exe
+E94. CrescentImp
+E95. microbackdoor.dll
+E96. oracle-java.exe
+E97. formbook.exe
+E98. SmokeLoader
+E99. DarkTortilla
+E100. AUKILL
+E101. Google Chrome
+E102. Themida
+E103. passport.bat
+E104. ScrubCrypt
+E105. BZIP
+E106. file.htm
+E107. SRP
+E108. TRYxaEbX [aka TRYxaEbX.ps1]
+E109. Troldesh
+E110. OpenIOC
+E111. CredPump
+E112. OpenPGP [aka PGP]
+E113. REVERSESSH
+E114. Viber
+E115. Pterodo
+E116. REDLINESTEALER
+E117. LUMMASTEALER
+E118. HXIOC
+E119. OpenSSH
+E120. OCEANMAP
+E121. HoaxPen
+E122. MASEPIE
+E123. PEAKLIGHT
+E124. SENDEMAIL
+E125. Python
+E126. AsyncRAT
+E127. SYSTEMBC
+E128. POEMGATE
+E129. CMS Drupal
+E130. GrimPlant
+E131. Mozilla Thunderbird
+E132. VENOM RAT
+E133. TunnelMole
+E134. GreyEnergy mini
+E135. AutoIt
+E136. Desired State Configuration (DSC)
+E137. Formbook/XLoader v2.5
+E138. java-sdk.exe
+E139. Corona-virus-Map.com.exe
+E140. core.dll
+E141. ClamAV
+E142. SaintBot
+E143. SuperOps RMM
+E144. Impacket
+E145. Apple Mail
+E146. PicassoLoader
+E147. GraphSteel
+E148. Mikrotik
+E149. GZIP
+E150. довідка.zip
+E151. 501_25_103.zip
+E152. Gazprombank.zakaz.docx.zip
+E153. Screengrabber
+E154. Fiddler
+E155. LITEMANAGER
+E156. Mimikatz
+E157. Ngrok
+E158. EdgeNotification.dll
+E159. AppLocker
+E160. OUTSTEEL
+E161. REMCOSRAT [aka REMCOS RAT]
+E162. Social
+E163. rclone
+E164. OceanicTools
+E165. RC2CL
+E166. LOADJUMP
+E167. Weevely
+E168. STEELHOOK
+E169. HANGTHREAD
+E170. DANABOT
+E171. WHITECAT
+E172. S/MIME
+E173. YARA
+E174. QUASAR RAT
+E175. KAZUAR
+E176. RMS
+E177. CAPIBAR
+E178. Видаткова_накладная_№121_вiд_18_липня_2023p.zip
+E179. dovidka.chm
+E180. Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.zip
+E181. TALESHOT
+Mentions:
+M1. "CVE-2020-0601" (Software) — options: E1, E2, E3, E4
+M2. "CVE-2020-0609" (Software) — options: E10, E2, E3, E4
+M3. "CVE-2020-0610" (Software) — options: E10, E3, E1, E4
+M4. "CVE-2020-0611" (Software) — options: E2, E10, E1, E4
+M5. "Windows 10" (Software) — options: E14, E15, E16, E17
+M6. "Windows Server 2016" (Software) — options: E16, E20, E23, E18
+M7. "Windows Server 2019" (Software) — options: E14, E20, E22, E23
+M8. "Windows Server 2012" (Software) — options: E16, E22, E18, E15
+M9. "Windows Remote Desktop Client" (Software) — options: E29, E21, E30, E31
+M10. "RDP Gateway Server" (Software) — options: E29, E33, E34, E16
+M11. "Windows 7" (Software) — options: E17, E23, E36, E18
+M12. "Windows 2008 R2" (Software) — options: E26, E23, E15, E17
+M13. "CVE-2020-7048" (Software) — options: E6, E10, E2, E1
+M14. "CVE-2020-7047" (Software) — options: E4, E10, E2, E1
+M15. "CVE-2018-7602" (Software) — options: E5, E4, E9, E38
+M16. "CVE-2018-7600" (Software) — options: E7, E4, E9, E38
+M17. "CVE-2022-30190" (Software) — options: E11, E2, E9, E10
+M18. "CVE-2022-21907" (Software) — options: E8, E27, E10, E2
+M19. "CVE-2023-38831" (Software) — options: E8, E10, E2, E9
+M20. "CVE-2017-17689" (Software) — options: E9, E5, E7, E12
+M21. "Windows 10 version 1809" (Software) — options: E23, E16, E15, E19
+M22. "WinExe" (Software) — options: E43, E44, E45, E46
+M23. "wscript.exe" (Software) — options: E50, E46, E51, E52
+M24. "WINWORD.EXE" (Software) — options: E26, E56, E52, E43
+M25. "wisw.exe" (Software) — options: E26, E46, E52, E47
+M26. "MSDriverMonitor.exe" (Software) — options: E58, E52, E26, E35
+M27. "BitdefenderWindowsUpdatePackage.exe" (Software) — options: E53, E54, E61, E26
+M28. "MSDriverLoader.exe" (Software) — options: E53, E63, E52, E64
+M29. "cmd.exe" (Software) — options: E66, E56, E67, E53
+M30. "microsoft-cortana.exe" (Software) — options: E26, E19, E70, E53
+M31. "Windows Prefetch.lNk" (Software) — options: E37, E20, E15, E73
+M32. "vbc.exe" (Software) — options: E26, E53, E57, E52
+M33. "Icloud.exe" (Software) — options: E57, E62, E66, E52
+M34. "Iclouding.exe" (Software) — options: E56, E57, E52, E66
+M35. "ROMFUSClient.exe" (Software) — options: E35, E52, E43, E53
+M36. "Python" (Software) — options: E78, E17, E79, E80
+M37. "WordPress" (Software) — options: E78, E83, E45, E17
+M38. "Usb" (Software) — options: E82, E87, E88, E36
+M39. "Microsoft Authenticator" (Software) — options: E19, E92, E17, E93
+M40. "java-sdk.exe" (Software) — options: E64, E96, E43, E71
+M41. "alt.exe" (Software) — options: E26, E57, E86, E52
+M42. "ROMServer.exe" (Software) — options: E72, E64, E52, E33
+M43. "Mozilla Thunderbird" (Software) — options: E36, E98, E99, E17
+M44. "one.exe" (Software) — options: E44, E53, E46, E52
+M45. "VBScript" (Software) — options: E17, E86, E103, E104
+M46. "write.exe" (Software) — options: E108, E44, E69, E52
+M47. "Browsers" (Software) — options: E101, E32, E16, E19
+M48. "timeout.exe" (Software) — options: E26, E56, E53, E52
+M49. "OpenSSH" (Software) — options: E17, E110, E111, E112
+M50. "dirbuster" (Software) — options: E37, E114, E115, E17
+M51. "OpenIOC" (Software) — options: E118, E112, E119, E48
+M52. "weboffice.exe" (Software) — options: E26, E46, E69, E52
+M53. "pfSense" (Software) — options: E78, E17, E122, E119
+M54. "Syncthing" (Software) — options: E82, E125, E126, E78
+M55. "Joomla" (Software) — options: E78, E128, E99, E129
+M56. "desktop.ini" (Software) — options: E21, E99, E77, E133
+M57. "formbook.exe" (Software) — options: E43, E52, E137, E47
+M58. "CoronaMap.exe" (Software) — options: E139, E52, E43, E140
+M59. "oracle-java.exe" (Software) — options: E64, E138, E71, E59
+M60. "dropper.exe" (Software) — options: E138, E69, E35, E52
+M61. "Nmap" (Software) — options: E120, E78, E141, E54
+M62. "SolarWinds Orion" (Software) — options: E36, E42, E14, E17
+M63. "AppLocker" (Software) — options: E37, E144, E145, E73
+M64. "MicroBackdoor" (Software) — options: E120, E147, E95, E148
+M65. "BZIP" (Software) — options: E149, E17, E51, E150
+M66. "Corona-virus-Map.com.exe" (Software) — options: E54, E38, E43, E96
+M67. "FileGrabber" (Software) — options: E82, E153, E36, E78
+M68. "Mikrotik" (Software) — options: E48, E78, E41, E156
+M69. "GZIP" (Software) — options: E105, E78, E130, E150
+M70. "RDP Wrapper" (Software) — options: E32, E25, E153, E64
+M71. "Remote Utilities" (Software) — options: E17, E82, E77, E78
+M72. "RC2CL" (Software) — options: E66, E162, E163, E48
+M73. "rclone" (Software) — options: E82, E17, E56, E69
+M74. "icloud.cmd" (Software) — options: E68, E56, E57, E62
+M75. "Ngrok" (Software) — options: E78, E148, E168, E133
+M76. "Robocopy" (Software) — options: E37, E41, E35, E17
+M77. "iclouds.cmd" (Software) — options: E66, E57, E56, E62
+M78. "WMIC" (Software) — options: E17, E118, E41, E78
+M79. "RAR" (Software) — options: E37, E173, E174, E82
+M80. "AutoIt" (Software) — options: E82, E142, E92, E17
+M81. "довідка.zip" (Software) — options: E178, E151, E179, E105
+M82. "ScrubCrypt" (Software) — options: E82, E51, E37, E41
+M83. "base_update.exe" (Software) — options: E52, E55, E46, E53
+M84. "Drupalgeddon2" (Software) — options: E129, E42, E17, E81
+
+=== RESPONSE (91.2s, in 6131 / out 12752 tok, stop) ===
+{"v":[{"m":"CVE-2020-0601","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-0609","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-0610","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-0611","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"Windows 10","id":"NEW","g":"Microsoft operating system","p":"E14","r":"b"},{"m":"Windows Server 2016","id":"NEW","g":"Microsoft server operating system","p":null,"r":null},{"m":"Windows Server 2019","id":"NEW","g":"Microsoft server operating system","p":null,"r":null},{"m":"Windows Server 2012","id":"NEW","g":"Microsoft server operating system","p":null,"r":null},{"m":"Windows Remote Desktop Client","id":"NEW","g":"Microsoft remote desktop software","p":null,"r":null},{"m":"RDP Gateway Server","id":"NEW","g":"Remote Desktop Protocol gateway server","p":null,"r":null},{"m":"Windows 7","id":"NEW","g":"Microsoft operating system","p":null,"r":null},{"m":"Windows 2008 R2","id":"NEW","g":"Microsoft server operating system","p":null,"r":null},{"m":"CVE-2020-7048","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-7047","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2018-7602","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2018-7600","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2022-30190","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2022-21907","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2023-38831","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2017-17689","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"Windows 10 version 1809","id":"NEW","g":"version of Windows 10","p":"E23","r":"v"},{"m":"WinExe","id":"NEW","g":"executable file type","p":null,"r":null},{"m":"wscript.exe","id":"NEW","g":"Windows Script Host executable","p":null,"r":null},{"m":"WINWORD.EXE","id":"NEW","g":"Microsoft Word executable","p":null,"r":null},{"m":"wisw.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"MSDriverMonitor.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"BitdefenderWindowsUpdatePackage.exe","id":"NEW","g":"Bitdefender update executable","p":null,"r":null},{"m":"MSDriverLoader.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"cmd.exe","id":"NEW","g":"Windows command prompt executable","p":null,"r":null},{"m":"microsoft-cortana.exe","id":"NEW","g":"Microsoft Cortana executable","p":null,"r":null},{"m":"Windows Prefetch.lNk","id":"NEW","g":"Windows prefetch shortcut file","p":null,"r":null},{"m":"vbc.exe","id":"NEW","g":"Visual Basic Compiler executable","p":null,"r":null},{"m":"Icloud.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Iclouding.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"ROMFUSClient.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Python","id":"NEW","g":"programming language","p":null,"r":null},{"m":"WordPress","id":"NEW","g":"content management system","p":null,"r":null},{"m":"Usb","id":"NEW","g":"universal serial bus","p":null,"r":null},{"m":"Microsoft Authenticator","id":"NEW","g":"Microsoft authentication app","p":null,"r":null},{"m":"java-sdk.exe","id":"NEW","g":"Java SDK executable","p":null,"r":null},{"m":"alt.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"ROMServer.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Mozilla Thunderbird","id":"NEW","g":"email client","p":null,"r":null},{"m":"one.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"VBScript","id":"NEW","g":"scripting language","p":null,"r":null},{"m":"write.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Browsers","id":"NEW","g":"web browsers","p":"E101","r":"b"},{"m":"timeout.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"OpenSSH","id":"NEW","g":"secure shell implementation","p":null,"r":null},{"m":"dirbuster","id":"NEW","g":"directory brute-force tool","p":null,"r":null},{"m":"OpenIOC","id":"NEW","g":"indicator of compromise format","p":null,"r":null},{"m":"weboffice.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"pfSense","id":"NEW","g":"firewall software","p":null,"r":null},{"m":"Syncthing","id":"NEW","g":"file synchronization software","p":null,"r":null},{"m":"Joomla","id":"NEW","g":"content management system","p":null,"r":null},{"m":"desktop.ini","id":"NEW","g":"Windows configuration file","p":null,"r":null},{"m":"formbook.exe","id":"NEW","g":"stealer malware executable","p":null,"r":null},{"m":"CoronaMap.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"oracle-java.exe","id":"NEW","g":"Java executable","p":null,"r":null},{"m":"dropper.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Nmap","id":"NEW","g":"network scanning tool","p":null,"r":null},{"m":"SolarWinds Orion","id":"NEW","g":"network management software","p":null,"r":null},{"m":"AppLocker","id":"NEW","g":"Windows application control feature","p":null,"r":null},{"m":"MicroBackdoor","id":"NEW","g":"backdoor malware","p":null,"r":null},{"m":"BZIP","id":"NEW","g":"compression format","p":null,"r":null},{"m":"Corona-virus-Map.com.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"FileGrabber","id":"NEW","g":"file extraction tool","p":null,"r":null},{"m":"Mikrotik","id":"NEW","g":"networking hardware/software","p":null,"r":null},{"m":"GZIP","id":"NEW","g":"compression format","p":null,"r":null},{"m":"RDP Wrapper","id":"NEW","g":"RDP extension tool","p":null,"r":null},{"m":"Remote Utilities","id":"NEW","g":"remote administration software","p":null,"r":null},{"m":"RC2CL","id":"NEW","g":"software","p":null,"r":null},{"m":"rclone","id":"NEW","g":"command-line cloud storage manager","p":null,"r":null},{"m":"icloud.cmd","id":"NEW","g":"command script","p":null,"r":null},{"m":"Ngrok","id":"NEW","g":"ingress tunneling tool","p":null,"r":null},{"m":"Robocopy","id":"NEW","g":"Windows file copying utility","p":null,"r":null},{"m":"iclouds.cmd","id":"NEW","g":"command script","p":null,"r":null},{"m":"WMIC","id":"NEW","g":"Windows Management Instrumentation Command-line","p":null,"r":null},{"m":"RAR","id":"NEW","g":"compression format","p":null,"r":null},{"m":"AutoIt","id":"NEW","g":"automation software","p":null,"r":null},{"m":"довідка.zip","id":"NEW","g":"compressed archive","p":null,"r":null},{"m":"ScrubCrypt","id":"NEW","g":"encryption tool","p":null,"r":null},{"m":"base_update.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Drupalgeddon2","id":"NEW","g":"Drupal vulnerability","p":"E129","r":"n"}]}

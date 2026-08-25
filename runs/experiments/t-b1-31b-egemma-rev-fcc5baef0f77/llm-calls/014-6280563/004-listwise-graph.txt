@@ -1,0 +1,203 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 265 canonicals"
+Entities:
+E1. afi-ukraine.org
+E2. griselda.co.ua
+E3. griselda.biz.ua
+E4. gurt.duna.ua
+E5. agro-sk.com.ua
+E6. 01mirror.com.ua
+E7. calendar.stib.com.ua
+E8. ukrnet.01mirror.com.ua
+E9. dpsu-gov-ua.com
+E10. griselda-edu.com.ua
+E11. edisk.in.ua
+E12. s3-ida.cloud
+E13. ochiplus.workers.dev
+E14. githubusercontent.com
+E15. falling-rice-4afa.ochiplus.workers.dev
+E16. desktopapluscom.workers.dev
+E17. aplusdesktop.workers.dev [aka desktopaplus.workers.dev]
+E18. armylpus.workers.dev
+E19. aplusmodgovua.workers.dev
+E20. armyplus-desktop.workers.dev
+E21. ca-central-1.awsplatform.online
+E22. bitter-hall-1c0c.ochiplus.workers.dev
+E23. telegram-auth.website [aka www.telegram-auth.website]
+E24. documentreader.net
+E25. edisk.ukrnet.01mirror.com.ua
+E26. in-touc.com
+E27. aws-join.cloud
+E28. get.in-touc.com
+E29. aws-ukraine.cloud
+E30. bitbucket.org
+E31. us-west-1.aws-ukraine.cloud
+E32. aws-online.cloud
+E33. ukrtelecom.cloud
+E34. avoufshire.icu
+E35. gov-ua.cloud
+E36. faillymoodkywko.shop
+E37. gov-sk.cloud
+E38. tax-gov-ua.com
+E39. cdnauthsoft.com
+E40. object-storage-service.com
+E41. s3-ua.cloud
+E42. ua-gov.cloud
+E43. documents-reader.com
+E44. mail-gov.com
+E45. group.kropyva.site
+E46. kropyva.group
+E47. protectraid.com
+E48. group.teneta.site
+E49. teneta.site
+E50. qsrgh.site [aka www.qsrgh.site]
+E51. confirmphone.site
+E52. share-drive.site
+E53. protect-password.site
+E54. account-guard.site
+E55. god-le.net
+E56. aws-meetings.cloud
+E57. aws-data.cloud
+E58. aws-il.cloud
+E59. govps.cloud
+E60. gov-au.cloud
+E61. govtr.cloud
+E62. vlada-gov.cloud
+E63. winupmirror.support
+E64. eu-central-1.ukrtelecom.cloud
+E65. us-west-1.ukrtelecom.cloud
+E66. ua-energy.cloud
+E67. ua-sec.cloud
+E68. ertel-audit.com
+E69. uspp.derzhposluhy.com
+E70. adobeprotectcheck.com
+E71. defender-bot.site
+E72. odwebp.com [aka svc.odwebp.com]
+E73. femundengerdal.no
+E74. annualgieconferenceinmunich2024.com
+E75. device.redirecl.com
+E76. kropyva.site
+E77. teneta.group
+E78. accept-action.site [aka group-invitation.site]
+E79. group-teneta.online
+E80. telegram.qweasdzx.site
+E81. milgov.site
+E82. qaz.su
+E83. get.god-le.com
+E84. cloud.god-le.net
+E85. gov-lt.cloud
+E86. gov-lv.cloud
+E87. complainnykso.shop
+E88. basedsymsotp.shop
+E89. ignoracndwko.shop
+E90. charistmatwio.shop
+E91. commisionipwn.shop
+E92. preachstrwnwjw.shop
+E93. grassemenwji.shop
+E94. stitchmiscpaew.shop
+E95. qweasdzx.site
+E96. furqaanenergy.com
+E97. god-le.com
+E98. govua.cloud
+E99. qaz.im
+E100. qaz.is
+E101. mails.support
+E102. imgurl.ir
+E103. s3-blackberry.cloud
+E104. aws-meet.cloud
+E105. cancel-auth.site
+E106. gieannualconferenceinmunich.com
+E107. s3-bah.cloud
+E108. mirotrent.com
+E109. plntr.mirotrent.com
+E110. ua-aws.army
+E111. s3-army.cloud
+Mentions:
+M1. "griselda-edu.com.ua" (Domain) — options: E1, E2, E3, E4
+M2. "griselda.biz.ua" (Domain) — options: E1, E4, E2, E5
+M3. "griselda.co.ua" (Domain) — options: E1, E4, E3, E5
+M4. "bitter-hall-1c0c.ochiplus.workers.dev" (Domain) — options: E13, E14, E15, E16
+M5. "falling-rice-4afa.ochiplus.workers.dev" (Domain) — options: E17, E13, E16, E22
+M6. "ochiplus.workers.dev" (Domain) — options: E17, E16, E18, E22
+M7. "edisk.in.ua" (Domain) — options: E1, E25, E4, E3
+M8. "afi-ukraine.org" (Domain) — options: E5, E29, E30, E4
+M9. "gurt.duna.ua" (Domain) — options: E5, E2, E11, E6
+M10. "agro-sk.com.ua" (Domain) — options: E1, E6, E37, E4
+M11. "dpsu-gov-ua.com" (Domain) — options: E38, E35, E39, E6
+M12. "kropyva.site" (Domain) — options: E14, E45, E46, E47
+M13. "passport-ukr-net.site" (Domain) — options: E1, E52, E53, E24
+M14. "aws-ukraine.cloud" (Domain) — options: E1, E32, E31, E27
+M15. "govua.cloud" (Domain) — options: E35, E59, E42, E60
+M16. "01mirror.com.ua" (Domain) — options: E8, E25, E4, E5
+M17. "calendar.stib.com.ua" (Domain) — options: E1, E6, E5, E4
+M18. "ukrtelecom.cloud" (Domain) — options: E64, E65, E29, E66
+M19. "derzhposluhy.com" (Domain) — options: E47, E69, E68, E70
+M20. "kropyva.group" (Domain) — options: E45, E76, E14, E1
+M21. "qweasdzx.site" (Domain) — options: E80, E14, E50, E81
+M22. "god-le.com" (Domain) — options: E55, E83, E84, E85
+M23. "faillymoodkywko.shop" (Domain) — options: E87, E88, E89, E90
+M24. "qwdfewf.com" (Domain) — options: E47, E72, E95, E14
+M25. "aplusmodgovua.workers.dev" (Domain) — options: E17, E16, E18, E13
+M26. "qaz.su" (Domain) — options: E99, E100, E14, E95
+M27. "bitbucket.org" (Domain) — options: E14, E1, E39, E22
+M28. "grassemenwji.shop" (Domain) — options: E90, E92, E88, E89
+M29. "teneta.site" (Domain) — options: E48, E14, E77, E105
+M30. "rozsenich.com" (Domain) — options: E14, E70, E106, E72
+M31. "githubusercontent.com" (Domain) — options: E40, E70, E108, E72
+M32. "aplusdesktop.workers.dev" (Domain) — options: E16, E20, E19, E18
+M33. "desktopapluscom.workers.dev" (Domain) — options: E17, E20, E19, E14
+M34. "armyplus-desktop.workers.dev" (Domain) — options: E17, E18, E16, E19
+M35. "armylpus.workers.dev" (Domain) — options: E20, E13, E17, E19
+
+=== RESPONSE (102.1s, in 3932 / out 9588 tok, stop) ===
+{"v":[{"m":"griselda-edu.com.ua","id":"NEW","g":"a domain","p":null,"r":null},{"m":"griselda.biz.ua","id":"NEW","g":"a domain","p":null,"r":null},{"m":"griselda.co.ua","id":"NEW","g":"a domain","p":null,"r":null},{"m":"bitter-hall-1c0c.ochiplus.workers.dev","id":"NEW","g":"a subdomain of ochiplus.workers.dev","p":"E13","r":"p"},{"m":"falling-rice-4afa.ochiplus.workers.dev","id":"NEW","g":"a subdomain of ochiplus.workers.dev","p":"E13","r":"p"},{"m":"ochiplus.workers.dev","id":"NEW","g":"a domain","p":null,"r":null},{"m":"edisk.in.ua","id":"NEW","g":"a domain","p":null,"r":null},{"m":"afi-ukraine.org","id":"NEW","g":"a domain","p":null,"r":null},{"m":"gurt.duna.ua","id":"NEW","g":"a domain","p":null,"r":null},{"m":"agro-sk.com.ua","id":"NEW","g":"a domain","p":null,"r":null},{"m":"dpsu-gov-ua.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"kropyva.site","id":"NEW","g":"a domain","p":"E45","r":"b"},{"m":"passport-ukr-net.site","id":"NEW","g":"a domain","p":null,"r":null},{"m":"aws-ukraine.cloud","id":"NEW","g":"a domain","p":"E31","r":"b"},{"m":"govua.cloud","id":"NEW","g":"a domain","p":null,"r":null},{"m":"01mirror.com.ua","id":"NEW","g":"a domain","p":"E8","r":"b"},{"m":"calendar.stib.com.ua","id":"NEW","g":"a domain","p":null,"r":null},{"m":"ukrtelecom.cloud","id":"NEW","g":"a domain","p":"E64","r":"b"},{"m":"derzhposluhy.com","id":"NEW","g":"a domain","p":"E69","r":"b"},{"m":"kropyva.group","id":"NEW","g":"a domain","p":null,"r":null},{"m":"qweasdzx.site","id":"NEW","g":"a domain","p":"E80","r":"b"},{"m":"god-le.com","id":"NEW","g":"a domain","p":"E83","r":"b"},{"m":"faillymoodkywko.shop","id":"NEW","g":"a domain","p":null,"r":null},{"m":"qwdfewf.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"aplusmodgovua.workers.dev","id":"NEW","g":"a domain","p":null,"r":null},{"m":"qaz.su","id":"NEW","g":"a domain","p":null,"r":null},{"m":"bitbucket.org","id":"NEW","g":"a domain","p":null,"r":null},{"m":"grassemenwji.shop","id":"NEW","g":"a domain","p":null,"r":null},{"m":"teneta.site","id":"NEW","g":"a domain","p":"E48","r":"b"},{"m":"rozsenich.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"githubusercontent.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"aplusdesktop.workers.dev","id":"NEW","g":"a domain","p":null,"r":null},{"m":"desktopapluscom.workers.dev","id":"NEW","g":"a domain","p":null,"r":null},{"m":"armyplus-desktop.workers.dev","id":"NEW","g":"a domain","p":null,"r":null},{"m":"armylpus.workers.dev","id":"NEW","g":"a domain","p":null,"r":null}]}

@@ -1,0 +1,337 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 1258 canonicals"
+Entities:
+E1. servehttp.com
+E2. up-lnk.myftp.org
+E3. evil.server.com
+E4. serveftp.com
+E5. borizhog.com [aka shormanz.com]
+E6. listen.servemp3.com
+E7. 3utilities.com
+E8. up-dot.myftp.org
+E9. 4qzm.com
+E10. worker-test-6f41.idv64828.workers.dev
+E11. docs.googie.com.ssl2.site
+E12. premiumjeck.site
+E13. site-1.work
+E14. api.dev-com.sc [aka dev-com.sc]
+E15. telegram.org-a0dm91dk31i.cloue.link
+E16. advanced-ip-scanner.website
+E17. gir.network
+E18. blogger.google2.certifiedauth.in
+E19. netman.servehttp.com
+E20. servemp3.com
+E21. servebeer.com
+E22. servegame.com [aka serveminecraft.net]
+E23. serveblog.net
+E24. servehalflife.com
+E25. serveirc.com
+E26. myftp.org
+E27. myddns.me
+E28. optica-rd.myftp.biz [aka myftp.biz]
+E29. array.myftp.biz
+E30. hopto.org
+E31. zapto.org
+E32. ua-cip.org
+E33. net.ssl4.online
+E34. net.ssl2.online
+E35. ukr.net.ssl1.online
+E36. net.ssl1.site
+E37. net.ssl3.online
+E38. edisk.ukr.net.ssl1.online
+E39. ukr.net.ssl1.site
+E40. net.ssl2.site
+E41. share.ukr.net.ssl1.site
+E42. filebin.net
+E43. meteolink.host
+E44. getmod.host
+E45. mockbin.org
+E46. stormpredictor.host
+E47. syncapp.host
+E48. bin.personlog.in
+E49. ns2.authssl.site
+E50. bounceme.net
+E51. armpress.net
+E52. aleimportadora.net
+E53. ns2.authssl.online
+E54. hopentools.ru
+E55. aneria.net
+E56. ns1.authssl.site
+E57. dwservice.net [aka www.dwservice.net]
+E58. ddns.net
+E59. 7tt.me
+E60. t.me
+E61. fernandoherrera.me
+E62. freedynamicdns.net
+E63. dyndns.com
+E64. d-upl.ddns.net
+E65. i1t.me
+E66. serv1-ukr.net
+E67. ser-ukr.net
+E68. advanced-ip-scaner.com
+E69. advanced-ip-scanner.site
+E70. diagnostic-resolver.com
+E71. advanced-ip-scanner.click
+E72. advanced-ip-scaner.com.vuxuancuong.com
+E73. programasparapc.net
+E74. www.portcheckers.com
+E75. ip-api.com
+E76. advanced-ip-scanners.com
+E77. docs.gdrive.com.ssl2.site
+E78. military-ukraine.site
+E79. eumr.site
+E80. modeselling.com
+E81. benokij.com
+E82. freedynamicdns.org
+E83. dnspod.com
+E84. ns1.modeselling.com
+E85. content.certifiedauth.in
+E86. sendmail.website
+E87. product-reviews.website
+E88. it-develop.me
+E89. webhook.site
+E90. m.personlog.in
+E91. mail.lebsack.de
+E92. eo9p1d2bfmioiot.m.pipedream.net [aka eoiw8lhjwuc3sh2.m.pipedream.net, eo2mxtqmeqzafqi.m.pipedream.net]
+E93. uadop.webflow.io
+E94. site-ukr.net
+E95. net.ssl4.site
+E96. tools.nexcess.net
+E97. net.ssl3.site
+E98. fex.net
+E99. net.ssl1.online [aka ssl1.online]
+E100. ns1.certifiedauth.in
+E101. ereservices.com
+E102. ns2.certifiedauth.in
+E103. notifications.certifiedauth.in
+E104. 109x194x3x7.static-customer.bryansk.ertelecom.ru
+E105. 192.198.87.130
+E106. 1833.site
+E107. 67.199.248.10
+E108. 67.199.248.11
+E109. a0656203.xsph.ru
+E110. 0-t.me
+E111. live.com.getssl.click
+E112. getssl.click
+E113. datagroup.ddns.net
+E114. ln-upl.ddns.net
+E115. star-cz.ddns.net
+E116. single-office.ddns.net
+E117. ddnsking.com
+E118. drive.google2.certifiedauth.in
+E119. redirectme.net
+E120. googledrive.com.ssl2.site
+E121. agreminj.com
+E122. reteredelete.top
+E123. ms-webdav-miniredir.com
+E124. servequake.com
+E125. 185.193.38.78
+E126. ipv6-wpnc.net
+E127. a0671524.xsph.ru
+E128. panelunregistertle-348.frge.io
+E129. ns1.getssl.click
+E130. keewoolas.pw
+E131. qkcew.ru [aka xcqef.ru]
+E132. kew.1qw.us
+E133. ret.6bc.us
+E134. nk.1qw.us
+E135. mail.arlingtonhousing.us
+E136. me.gov.ua
+E137. aspx.io
+E138. ukr.net
+E139. aspe.ro
+E140. czyrqdnvpujmmjkfhhvsvlaax17vd5r6v.oast.fun
+E141. czyrqdnvpujmmjkfhhvsclx05sfi23bfr.oast.fun
+E142. eopkne8kapj01xi.m.pipedream.net
+E143. eoy7zvsvn6xfcmy.m.pipedream.net
+E144. czyrqdnvpujmmjkfhhvs4knf1av02demj.oast.fun
+E145. eos93vb2cwsu3xf.m.pipedream.net
+E146. czyrqdnvpujmmjkfhhvsgapqr3hclnhhj.oast.fun
+E147. ns.ns2-dns.com
+E148. docs.googie.com.ssl3.online
+E149. telesecurity.org
+E150. melitaeas.online [aka melitaes.online]
+E151. hsts.online
+E152. accounts.certifiedauth.in
+E153. elyslink.online
+E154. ssl2.online
+E155. authssl.online
+E156. gdrive.com.ssl2.online
+E157. servepics.com
+E158. www.dropbox.com
+E159. www.authcheck.in
+E160. dnslookup.seowebchecker.com
+E161. www.facebook.com
+E162. www.personlog.in
+E163. www.michiganmastereltiempo.com
+E164. www.msftncsi.com
+E165. surname192.temp.swtest.ru
+E166. as49447.net
+E167. a0695487.xsph.ru
+E168. wpc-v0cdn.org
+E169. viewdns.net
+E170. crv-ukr.net
+E171. myvnc.com
+E172. bom02.gotdns.ch
+E173. ns2-dns.com [aka ns3-dns.com]
+E174. gobits3.com
+E175. sec-t.info
+E176. mst-ukr.net
+E177. ukr.net.ssl4.site
+E178. msx-ukr.net
+E179. 1-ukr.net
+E180. kew.8df.us
+E181. rpc.1qw.us
+E182. prostotaknet.net
+E183. alt-2cdn.net
+E184. dynamic.exmo.day
+E185. servecounterstrike.com
+E186. apitelegram.org
+E187. gordon6.hopto.org
+E188. authssl.org
+E189. bitbucket.org
+E190. downloadrezerves.ru
+E191. tronogram.com
+E192. prot-ukr.net
+E193. paparat.ru [aka pasamart.ru]
+E194. ftp.artrsllc.com
+E195. chimeramarketplace.online
+E196. ftp.ssttekstil.com [aka ssttekstil.com]
+E197. ryomy.ru
+E198. viewdns.info
+E199. cs1.wpc-v0cdn.org
+E200. 1000020.xyz
+E201. cloudlnk.org
+E202. cloue.link
+E203. telegram.org.t.me-cloud.link
+E204. authssl.link
+E205. goaccount.link
+E206. mivocloud.com
+E207. claud.in
+E208. www3.google2.certifiedauth.in
+E209. bugiplaysec.com
+E210. bilitora.ru
+E211. onthewifi.com
+E212. kilitro.ru
+E213. mail-box.site
+E214. fast-mail.site
+E215. yotsubasociety.website
+E216. your-mail.press
+E217. mail.certifiedauth.in
+E218. lamazone.site
+E219. ftp.thefoodplace.net
+E220. ns1.fountainrate.com
+E221. bt.hurtom.com
+E222. chinagrill.co
+E223. worker-misty-mouse-6ac7.aky15825.workers.dev
+E224. files.catbox.moe
+E225. kitten-268.frge.io
+E226. net-certificate.services
+E227. cloudflare-dns.com
+Mentions:
+M1. "netman.servehttp.com" (Domain) — options: E1, E2, E3, E4
+M2. "worker-misty-mouse-6ac7.aky15825.workers.dev" (Domain) — options: E10, E11, E12, E13
+M3. "servehttp.com" (Domain) — options: E4, E19, E5, E20
+M4. "serveftp.com" (Domain) — options: E1, E5, E22, E25
+M5. "myftp.org" (Domain) — options: E27, E28, E8, E2
+M6. "net.ssl1.online" (Domain) — options: E33, E34, E35, E36
+M7. "netbin.host" (Domain) — options: E42, E43, E44, E45
+M8. "tools.nexcess.net" (Domain) — options: E49, E50, E51, E52
+M9. "myddns.me" (Domain) — options: E58, E59, E26, E60
+M10. "serveblog.net" (Domain) — options: E1, E66, E21, E52
+M11. "advanced-ip-scanners.com" (Domain) — options: E68, E69, E70, E71
+M12. "advanced-ip-scanner.site" (Domain) — options: E68, E76, E16, E71
+M13. "ddnsking.com" (Domain) — options: E58, E80, E5, E27
+M14. "advanced-ip-scanner.website" (Domain) — options: E68, E76, E69, E71
+M15. "m-vz.webhop.me" (Domain) — options: E2, E88, E89, E90
+M16. "sytes.net" (Domain) — options: E40, E94, E58, E52
+M17. "advanced-ip-scaner.com" (Domain) — options: E76, E71, E72, E16
+M18. "net-certificate.services" (Domain) — options: E99, E100, E101, E52
+M19. "185.193.38.78" (Domain) — options: E104, E105, E106, E107
+M20. "advanced-ip-scanner.click" (Domain) — options: E68, E76, E69, E16
+M21. "ddns.net" (Domain) — options: E27, E113, E64, E62
+M22. "filetransrediremin.com" (Domain) — options: E118, E7, E119, E5
+M23. "servegame.com" (Domain) — options: E4, E124, E5, E21
+M24. "67.199.248.10" (Domain) — options: E108, E104, E105, E2
+M25. "kew.8df.us" (Domain) — options: E130, E131, E132, E120
+M26. "as49447.net" (Domain) — options: E126, E52, E137, E129
+M27. "eo9p1d2bfmioiot.m.pipedream.net" (Domain) — options: E140, E141, E142, E143
+M28. "67.199.248.11" (Domain) — options: E107, E104, E125, E105
+M29. "telecomds.online" (Domain) — options: E148, E149, E150, E151
+M30. "servemp3.com" (Domain) — options: E6, E1, E4, E22
+M31. "www.portcheckers.com" (Domain) — options: E76, E158, E159, E160
+M32. "servecounterstrike.com" (Domain) — options: E24, E124, E5, E1
+M33. "eos93vb2cwsu3xf.m.pipedream.net" (Domain) — options: E140, E141, E92, E144
+M34. "192.198.87.130" (Domain) — options: E107, E125, E108, E165
+M35. "ipv6-wpnc.net" (Domain) — options: E168, E169, E73, E52
+M36. "gotdns.ch" (Domain) — options: E27, E172, E26, E63
+M37. "numsecukr.net" (Domain) — options: E175, E176, E138, E52
+M38. "kew.1qw.us" (Domain) — options: E130, E9, E180, E134
+M39. "eopkne8kapj01xi.m.pipedream.net" (Domain) — options: E140, E141, E92, E146
+M40. "ret.6bc.us" (Domain) — options: E122, E132, E134, E183
+M41. "freedynamicdns.net" (Domain) — options: E82, E58, E52, E184
+M42. "servehalflife.com" (Domain) — options: E185, E22, E1, E5
+M43. "zapto.org" (Domain) — options: E26, E30, E186, E8
+M44. "programasparapc.net" (Domain) — options: E190, E52, E191, E76
+M45. "ftp.thefoodplace.net" (Domain) — options: E194, E52, E195, E26
+M46. "eoy7zvsvn6xfcmy.m.pipedream.net" (Domain) — options: E140, E141, E92, E144
+M47. "viewdns.net" (Domain) — options: E198, E160, E58, E52
+M48. "rpc.1qw.us" (Domain) — options: E168, E132, E134, E199
+M49. "me-cloud.link" (Domain) — options: E201, E202, E203, E204
+M50. "3utilities.com" (Domain) — options: E208, E209, E210, E5
+M51. "sendmail.website" (Domain) — options: E213, E214, E16, E215
+M52. "ftp.artrsllc.com" (Domain) — options: E219, E196, E4, E220
+M53. "worker-test-6f41.idv64828.workers.dev" (Domain) — options: E223, E224, E225, E13
+
+=== RESPONSE (48.4s, in 6383 / out 7160 tok, stop) ===
+{"v":[{"m":"netman.servehttp.com","id":"E19","g":null,"p":null,"r":null},{"m":"worker-misty-mouse-6ac7.aky15825.workers.dev","id":"E223","g":null,"p":null,"r":null},{"m":"servehttp.com","id":"E1","g":null,"p":null,"r":null},{"m":"serveftp.com","id":"E4","g":null,"p":null,"r":null},{"m":"myftp.org","id":"E26","g":null,"p":null,"r":null},{"m":"net.ssl1.online","id":"E99","g":null,"p":null,"r":null},{"m":"netbin.host","id":"NEW","g":"domain name","p":null,"r":null},{"m":"tools.nexcess.net","id":"E96","g":null,"p":null,"r":null},{"m":"myddns.me","id":"E27","g":null,"p":null,"r":null},{"m":"serveblog.net","id":"E23","g":null,"p":null,"r":null},{"m":"advanced-ip-scanners.com","id":"E76","g":null,"p":null,"r":null},{"m":"advanced-ip-scanner.site","id":"E69","g":null,"p":null,"r":null},{"m":"ddnsking.com","id":"E117","g":null,"p":null,"r":null},{"m":"advanced-ip-scanner.website","id":"E16","g":null,"p":null,"r":null},{"m":"m-vz.webhop.me","id":"NEW","g":"domain name","p":null,"r":null},{"m":"sytes.net","id":"NEW","g":"domain name","p":null,"r":null},{"m":"advanced-ip-scaner.com","id":"E68","g":null,"p":null,"r":null},{"m":"net-certificate.services","id":"E226","g":null,"p":null,"r":null},{"m":"185.193.38.78","id":"E125","g":null,"p":null,"r":null},{"m":"advanced-ip-scanner.click","id":"E71","g":null,"p":null,"r":null},{"m":"ddns.net","id":"E58","g":null,"p":null,"r":null},{"m":"filetransrediremin.com","id":"NEW","g":"domain name","p":null,"r":null},{"m":"servegame.com","id":"E22","g":null,"p":null,"r":null},{"m":"67.199.248.10","id":"E107","g":null,"p":null,"r":null},{"m":"kew.8df.us","id":"E180","g":null,"p":null,"r":null},{"m":"as49447.net","id":"E166","g":null,"p":null,"r":null},{"m":"eo9p1d2bfmioiot.m.pipedream.net","id":"E92","g":null,"p":null,"r":null},{"m":"67.199.248.11","id":"E108","g":null,"p":null,"r":null},{"m":"telecomds.online","id":"NEW","g":"domain name","p":null,"r":null},{"m":"servemp3.com","id":"E20","g":null,"p":null,"r":null},{"m":"www.portcheckers.com","id":"E74","g":null,"p":null,"r":null},{"m":"servecounterstrike.com","id":"E185","g":null,"p":null,"r":null},{"m":"eos93vb2cwsu3xf.m.pipedream.net","id":"E145","g":null,"p":null,"r":null},{"m":"192.198.87.130","id":"E105","g":null,"p":null,"r":null},{"m":"ipv6-wpnc.net","id":"E126","g":null,"p":null,"r":null},{"m":"gotdns.ch","id":"NEW","g":"domain name","p":"E172","r":"b"},{"m":"numsecukr.net","id":"NEW","g":"domain name","p":null,"r":null},{"m":"kew.1qw.us","id":"E132","g":null,"p":null,"r":null},{"m":"eopkne8kapj01xi.m.pipedream.net","id":"E142","g":null,"p":null,"r":null},{"m":"ret.6bc.us","id":"E133","g":null,"p":null,"r":null},{"m":"freedynamicdns.net","id":"E62","g":null,"p":null,"r":null},{"m":"servehalflife.com","id":"E24","g":null,"p":null,"r":null},{"m":"zapto.org","id":"E31","g":null,"p":null,"r":null},{"m":"programasparapc.net","id":"E73","g":null,"p":null,"r":null},{"m":"ftp.thefoodplace.net","id":"E219","g":null,"p":null,"r":null},{"m":"eoy7zvsvn6xfcmy.m.pipedream.net","id":"E143","g":null,"p":null,"r":null},{"m":"viewdns.net","id":"E169","g":null,"p":null,"r":null},{"m":"rpc.1qw.us","id":"E181","g":null,"p":null,"r":null},{"m":"me-cloud.link","id":"NEW","g":"domain name","p":null,"r":null},{"m":"3utilities.com","id":"E7","g":null,"p":null,"r":null},{"m":"sendmail.website","id":"E86","g":null,"p":null,"r":null},{"m":"ftp.artrsllc.com","id":"E194","g":null,"p":null,"r":null},{"m":"worker-test-6f41.idv64828.workers.dev","id":"E10","g":null,"p":null,"r":null}]}

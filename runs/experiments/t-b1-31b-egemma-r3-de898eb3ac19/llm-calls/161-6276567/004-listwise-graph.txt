@@ -1,0 +1,183 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 139 canonicals"
+Entities:
+E1. Mikael LLC
+E2. VPS.AG
+E3. Matrix Telecom Ltd
+E4. Security Newspaper
+E5. Great C Technologies Inc
+E6. WebFactory Ltd
+E7. 360Netlab
+E8. Talos Intelligence
+E9. Cloudflare Inc. [aka Cloudflare]
+E10. Telegram
+E11. АТ "Укртелеком"
+E12. SmartApe LLC
+E13. Linux Team
+E14. Vimpelcom
+E15. George Alan Developments Incorporated
+E16. Intel
+E17. Microsoft
+E18. Habr
+E19. Mozilla
+E20. NATO [aka НАТО]
+E21. ТСН
+E22. Google
+E23. ООО "Трейдер софт"
+E24. ТОО "ИТ‑ГРАД"
+E25. Shodan
+E26. ООО "ХОСТИНГ-ТЕХНОЛОГИИ"
+E27. Група високого рівня
+E28. HostIQ
+E29. VirusTotal
+E30. cherryservers.com [aka Cherry Servers]
+E31. OptiData
+E32. 4vendeta
+E33. Linode
+E34. Pipedream
+E35. AS37148 (нігерійський оператор телекомунікацій)
+E36. Adobe
+E37. Oracle
+E38. Bitdefender
+E39. Rapid7
+E40. CybExer Technologies
+E41. Microsoft Threat Intelligence
+E42. FireEye
+E43. ESET
+E44. BreakingSecurity
+E45. SonarSource
+E46. Recorded Future
+E47. Fortinet
+E48. LiteManagerTeam
+E49. CERT Polska
+E50. CyberArmyofRussia_Reborn
+E51. BleepingComputer
+E52. Namecheap
+E53. DWService
+E54. hetzner.com
+E55. Cisco
+E56. Internet Domain Service BS Corp.
+E57. WordFence
+E58. cloudx.ru
+E59. digitalocean.com [aka DigitalOcean]
+E60. macloud.ru
+E61. VMware
+E62. Торрент-Толока
+E63. Domaintools
+E64. iFastNet
+E65. ООО "ГЛОБАЛ ИНТЕРНЕТ РЕШЕНИЯ"
+E66. NirSoft
+E67. Фонд "Альянс Демократій"
+E68. ООН
+E69. Avast
+E70. Apple
+E71. Qualys
+E72. OASIS
+E73. FIRST
+E74. InfinityFree
+E75. Українське національне інформаційне агентство "Укрінформ" [aka Ukrinform]
+E76. Discord
+E77. Catbox
+E78. vServerCo
+E79. Центр соціальних та маркетингових досліджень (SOCIS)
+E80. UKR.NET
+E81. iroko.net
+E82. АТ "Укрзалізниця"
+E83. Глобальна комісія зі стабільності кіберпростору (GCSC)
+E84. ГО «Міжнародний університет цифрової безпеки»
+E85. Check Point Research
+E86. Європейський Союз [aka ЄС]
+E87. Wikipedia
+E88. PortSwigger
+E89. Україна 24
+E90. тomhunter
+E91. Nice-IT
+E92. WEX
+E93. Facebook
+E94. ПрАТ «НЕК «Укренерго»
+E95. НАК «Нафтогаз України»
+E96. egihosting.com
+Mentions:
+M1. "SmartApe LLC" (Organization) — options: E1, E2, E3, E4
+M2. "Matrix Telecom Ltd" (Organization) — options: E5, E6, E10, E2
+M3. "Mikael LLC" (Organization) — options: E5, E12, E15, E3
+M4. "ООН" (Organization) — options: E20, E21, E22, E23
+M5. "VPS.AG" (Organization) — options: E28, E29, E7, E30
+M6. "Apple" (Organization) — options: E22, E36, E37, E18
+M7. "Great C Technologies Inc" (Organization) — options: E15, E40, E9, E41
+M8. "VMware" (Organization) — options: E2, E33, E9, E38
+M9. "CybExer Technologies" (Organization) — options: E5, E43, E49, E26
+M10. "vServerCo" (Organization) — options: E2, E30, E53, E28
+M11. "Cloudflare Inc." (Organization) — options: E54, E57, E58, E5
+M12. "stark-industries.solutions" (Organization) — options: E47, E44, E29, E2
+M13. "Intel" (Organization) — options: E20, E8, E13, E22
+M14. "ООО "Трейдер софт"" (Organization) — options: E48, E26, E5, E24
+M15. "Oracle" (Organization) — options: E2, E47, E70, E22
+M16. "FireEye" (Organization) — options: E47, E73, E38, E74
+M17. "Telegram" (Organization) — options: E75, E20, E34, E3
+M18. "NV" (Organization) — options: E20, E7, E22, E69
+M19. "Adobe" (Organization) — options: E38, E22, E70, E7
+M20. "Cisco" (Organization) — options: E28, E33, E76, E20
+M21. "iFastNet" (Organization) — options: E39, E47, E80, E81
+M22. "ООО "ГЛОБАЛ ИНТЕРНЕТ РЕШЕНИЯ"" (Organization) — options: E12, E26, E23, E82
+M23. "WEX" (Organization) — options: E20, E43, E86, E6
+M24. "OptiData" (Organization) — options: E28, E32, E71, E47
+M25. "Pipedream" (Organization) — options: E18, E10, E87, E90
+M26. "NirSoft" (Organization) — options: E33, E17, E2, E73
+M27. "WebFactory Ltd" (Organization) — options: E2, E3, E74, E76
+M28. "АТ "Укртелеком"" (Organization) — options: E75, E82, E89, E94
+M29. "ООО "ХОСТИНГ-ТЕХНОЛОГИИ"" (Organization) — options: E23, E65, E5, E40
+M30. "ТОО "ИТ‑ГРАД"" (Organization) — options: E5, E23, E91, E11
+
+=== RESPONSE (40.9s, in 3265 / out 7169 tok, stop) ===
+{"v":[{"m":"SmartApe LLC","id":"NEW","g":"an organization","p":null,"r":null},{"m":"Matrix Telecom Ltd","id":"NEW","g":"a telecommunications company","p":null,"r":null},{"m":"Mikael LLC","id":"NEW","g":"an organization","p":null,"r":null},{"m":"ООН","id":"NEW","g":"the United Nations","p":null,"r":null},{"m":"VPS.AG","id":"NEW","g":"a hosting provider","p":null,"r":null},{"m":"Apple","id":"NEW","g":"a technology company","p":null,"r":null},{"m":"Great C Technologies Inc","id":"NEW","g":"a technology company","p":null,"r":null},{"m":"VMware","id":"NEW","g":"a virtualization software company","p":null,"r":null},{"m":"CybExer Technologies","id":"NEW","g":"a cybersecurity company","p":null,"r":null},{"m":"vServerCo","id":"NEW","g":"a server hosting company","p":null,"r":null},{"m":"Cloudflare Inc.","id":"NEW","g":"a cloud services company","p":null,"r":null},{"m":"stark-industries.solutions","id":"NEW","g":"an organization","p":null,"r":null},{"m":"Intel","id":"NEW","g":"a semiconductor company","p":null,"r":null},{"m":"ООО \"Трейдер софт\"","id":"NEW","g":"a software company","p":null,"r":null},{"m":"Oracle","id":"NEW","g":"a software company","p":null,"r":null},{"m":"FireEye","id":"NEW","g":"a cybersecurity company","p":null,"r":null},{"m":"Telegram","id":"NEW","g":"a messaging platform","p":null,"r":null},{"m":"NV","id":"NEW","g":"an organization","p":null,"r":null},{"m":"Adobe","id":"NEW","g":"a software company","p":null,"r":null},{"m":"Cisco","id":"NEW","g":"a networking company","p":null,"r":null},{"m":"iFastNet","id":"NEW","g":"a hosting company","p":null,"r":null},{"m":"ООО \"ГЛОБАЛ ИНТЕРНЕТ РЕШЕНИЯ\"","id":"NEW","g":"an internet solutions company","p":null,"r":null},{"m":"WEX","id":"NEW","g":"an organization","p":null,"r":null},{"m":"OptiData","id":"NEW","g":"a data company","p":null,"r":null},{"m":"Pipedream","id":"NEW","g":"an integration platform","p":null,"r":null},{"m":"NirSoft","id":"NEW","g":"a software utility developer","p":null,"r":null},{"m":"WebFactory Ltd","id":"NEW","g":"a web development company","p":null,"r":null},{"m":"АТ \"Укртелеком\"","id":"NEW","g":"a Ukrainian telecommunications company","p":null,"r":null},{"m":"ООО \"ХОСТИНГ-ТЕХНОЛОГИИ\"","id":"NEW","g":"a hosting technology company","p":null,"r":null},{"m":"ТОО \"ИТ‑ГРАД\"","id":"NEW","g":"an IT company","p":null,"r":null}]}

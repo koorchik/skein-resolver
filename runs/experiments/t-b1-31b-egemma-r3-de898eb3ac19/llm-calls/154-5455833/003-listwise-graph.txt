@@ -1,0 +1,617 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 886 canonicals"
+Entities:
+E1. nirsoft.me
+E2. microsoft.com
+E3. xcqef.ru
+E4. microjob.mn
+E5. docs.microsoft.com
+E6. hilr.ru
+E7. answers.microsoft.com
+E8. qkcew.ru
+E9. portal.msrc.microsoft.com
+E10. superboler.com
+E11. lingrevelat.com
+E12. verofes.com
+E13. rresteraftin.com
+E14. serveftp.com [aka servehttp.com]
+E15. golgba.com
+E16. 3utilities.com
+E17. benokij.com
+E18. chinagrill.co
+E19. octoberoctopus.co.za
+E20. fan-guy.com
+E21. datagroup.ddns.net
+E22. akaluij.com
+E23. t.co
+E24. 4qzm.com
+E25. fast-mail.site
+E26. dyndns.com
+E27. moskeet.com
+E28. aneria.net
+E29. photobucket.com
+E30. ns.ns2-dns.com
+E31. it-develop.me
+E32. t.me
+E33. 7tt.me
+E34. 0-t.me
+E35. fernandoherrera.me
+E36. i1t.me
+E37. gir.network
+E38. criticalosl.tech
+E39. net.frge.io
+E40. aspx.io
+E41. _.ukr.net.frge.io
+E42. ukr.net.frge.io
+E43. cuckoo.cert.ee
+E44. kitten-268.frge.io
+E45. abracodabugalimpopo.ru
+E46. milotraf.ru
+E47. rncsq.ru
+E48. acteran.ru
+E49. zbignef.com
+E50. nxkad.ru
+E51. apoxipodes.ru
+E52. xcasinobonuses.net
+E53. kurapat.ru
+E54. lopasts.ru
+E55. tiloraso.ru
+E56. cooperi.ru
+E57. potrakit.ru
+E58. clipperso.ru
+E59. ryomy.ru
+E60. me-cloud.link
+E61. telegram.org-a0dm91dk31i.cloue.link
+E62. claud.in
+E63. tgeo.link
+E64. ceriossl.info
+E65. telegram.org.t.me-cloud.link
+E66. center-gos.top
+E67. cs1.wpc-v0cdn.org
+E68. frge.io
+E69. central-gos.top
+E70. gofile.io
+E71. tools.nexcess.net
+E72. plexbd.net
+E73. yandex.ru
+E74. aleimportadora.net
+E75. ukr.net
+E76. emterox.ru
+E77. sytes.net
+E78. a0322810.xsph.ru
+E79. a0695487.xsph.ru
+E80. vdsina.ru
+E81. a0656203.xsph.ru
+E82. a0671524.xsph.ru
+E83. a0667987.xsph.ru
+E84. civh.ru
+E85. kilitro.ru
+E86. hillespostelnm.eu
+E87. erwini.ru
+E88. dodortar.ru
+E89. bilitora.ru
+E90. xsph.ru
+E91. bubenci.ru
+E92. nx0.ru
+E93. redport80.ru
+E94. milotrad.ru
+E95. moolin.ru
+E96. global-news-world.com
+E97. metanat.ru
+E98. dnspod.com
+E99. misp.cert.gov.ua
+E100. noip.com
+E101. www.msp.gov.ua [aka msp.gov.ua]
+E102. circulas.ru
+E103. cisa.gov
+E104. social.technet.microsoft.com
+E105. airmauritiusticket.com
+E106. chis-gos.top
+E107. barbacoalosmartinez.com
+E108. omyce.ru
+E109. app.any.run
+E110. filterfullproperty.ru
+E111. tortunas.ru
+E112. ligaspace.ru
+E113. mail.numina.md
+E114. ganara.ru
+E115. ardeas.ru
+E116. ruvds.com
+E117. lnasfe.ru
+E118. golos2023q.ru
+E119. wicksl.ru
+E120. rnbo.gov.ua
+E121. ncscc.gov.ua
+E122. om-ukr.net
+E123. mitlubald.ru
+E124. mulleti.ru
+E125. jokotras.ru
+E126. viewdns.info
+E127. shormanz.com
+E128. shorturl.at
+E129. censys.io
+E130. ip-api.com
+E131. meteolink.host
+E132. telegram.org-a0dk3dm91iu.tgeo.link
+E133. cloue.link
+E134. telecomds.online
+E135. meta.ua
+E136. paparat.ru
+E137. metallergroup.ru
+E138. atlantar.ru
+E139. tbwelo.ru
+E140. hawksi.ru
+E141. 00-l.ru
+E142. callsol.ru
+E143. cmx-ukr.net
+E144. mx3-ukr.net
+E145. msx-ukr.net
+E146. 1-ukr.net
+E147. telegra.ph
+E148. teiegram1.me
+E149. telegram-wap.me
+E150. telegram.uk.net
+E151. jslopasitmon.com
+E152. kopratiso.ru
+E153. lolifans.ru
+E154. enterwords.ru
+E155. domtern.com
+E156. maxteroper.ru
+E157. detroito.ru
+E158. tarlit.ru
+E159. motoristo.ru
+E160. mockbin.org
+E161. zaikaopentra.com.ru
+E162. tvpharm.ru
+E163. 1000020.xyz
+E164. rbadm.top
+E165. uacompensation.xyz
+E166. everything-everywhere.at.ply.gg
+E167. uatax-compens.xyz
+E168. ec-compensation.xyz
+E169. tax-compenses.xyz
+E170. nikotod.ru
+E171. zaikadoctor.ru
+E172. dwservice.net [aka www.dwservice.net]
+E173. ao3.hmgo.pw
+E174. carpetmarker.pw
+E175. wm-gos.top [aka ws-gos.top]
+E176. privat24.ua-wallet.pw
+E177. nafillimonilini.net
+E178. serveblog.net
+E179. shikjil.com
+E180. armpress.net
+E181. netbin.host
+E182. site-1.work
+E183. giraffe-tour.ru
+E184. password-ukr.net
+E185. gmail.com
+E186. dishsouq.com
+E187. easternexecutiveclub.com
+E188. britxec.com
+E189. napropertyhub.eu
+E190. mafirti.ru
+E191. pasamart.ru
+E192. gondurasonline.ru
+E193. t-me.io
+E194. 3dstore.pro
+E195. tg.cyou
+E196. vote-me.top
+E197. pro-gos.top
+E198. aspe.ro
+E199. alfa-gos.top
+E200. cerv-gos.top
+E201. ais-gos.top
+E202. an-gos.top
+E203. bow-gos.top
+E204. ev-gos.top
+E205. prefer.jokotras.ru
+E206. jokoloret.ru
+E207. for-gos.top
+E208. dipteran.online
+E209. zallesman.ru
+E210. ipodromlan.ru
+E211. tme-id.com
+E212. telegram-wed.id
+E213. kjhgdj99fuller.ru
+E214. verify-ukr.net
+E215. ereservices.com
+E216. beroozresaan.com
+E217. jorgava.com
+E218. agrikoz.com
+E219. e-wwg.com
+E220. ddnsking.com
+E221. zaliphone.com
+E222. pastebin.com
+E223. anidoz.com
+E224. lthhc-zm.com
+E225. agreminj.com
+E226. arelyevennot.top
+E227. arminext.com
+E228. blopik.com
+E229. servepics.com
+E230. lonejade.com
+E231. www.portcheckers.com
+E232. blinkij.com
+E233. aluaadin.com
+E234. azimurs.com
+E235. sansaispa.com
+E236. hofsteder.ru
+E237. axikok.com
+E238. teierqam.org
+E239. servegame.com
+E240. ukrainebayra.com
+E241. ua.aspx.io
+E242. ansaigon.com
+E243. billiopa.com
+E244. ns.ns3-dns.com
+E245. vuonorganic.com
+E246. diagnostic-resolver.com
+E247. myvnc.com
+E248. drimzis.com
+E249. apokil.com
+E250. analyze.intezer.com
+E251. troadsecow.com
+E252. modeselling.com
+E253. ritionalvalueon.top
+E254. tronogram.com
+E255. oncetrips.com
+E256. expeditionabroad.com
+E257. gobits3.com
+E258. droopily.eu
+E259. zalamafiapopcultur.eu
+E260. kissmafiabeforyoudied.eu
+E261. baidenfree.com
+E262. arentuk.com
+E263. combinedresidency.org
+E264. raidforums.com
+E265. dogiraftig.com
+E266. servebeer.com
+E267. supermarioprohozhdenie.ru
+E268. sinergil.com
+E269. support-ukr.net
+E270. ns1.modeselling.com
+E271. baidencult.com
+E272. evil.server.com
+E273. delta-storages.com
+E274. rivierafamily.com
+E275. ertimadifa.com
+E276. onedrive.live.com
+E277. barbatus.online
+E278. smartideabusiness.com
+E279. ohsxy.com
+E280. outlook.com
+E281. mygraphbook.com
+E282. ginaengg.com
+E283. upportteam.lingrevelat.com
+E284. vinergil.com
+E285. inter-webservices.com
+E286. finformservice.com
+E287. flayga.ru
+E288. cloudflare-dns.com
+E289. onthewifi.com
+E290. vtxhospital.com
+E291. advanced-ip-scaner.com.vuxuancuong.com
+E292. hexactor.com
+E293. wpc-v0cdn.org
+E294. golosdruga.ru
+E295. gopoppers.com
+E296. admus.top
+E297. icanhazip.com
+E298. zaikaopentra.com.ug
+E299. zaikaopentra-com-ug.su
+E300. zaikaopentra-com-ug.online
+E301. coudzoom.ru
+E302. swinj.online
+E303. dis.gov.ua
+E304. github.com
+E305. districoperav.icu
+E306. proxylogon.com
+E307. rivertimad.com
+E308. ifastnet.com
+E309. zuh3vcyskd4gipkm.onion [aka cryptsen7fo43rr6.onion]
+E310. kissmafiabeforyoudied.ru
+E311. kismamabeforyougo.ru
+E312. wasabiwallet.online
+E313. kismamabeforyougo.su
+E314. kismamabeforyougo.com
+E315. mill.co.ua
+E316. cautionphenomenon.co.kr
+E317. hotmail.com
+E318. shodan.io
+E319. iforma.es
+E320. serveirc.com
+E321. tataguyz.co.za
+E322. thestoreroomnsw.com.au
+E323. mail-box.site
+E324. your-mail.press
+E325. sendmail.website
+E326. 1833.site
+E327. lamazone.site
+E328. eumr.site
+E329. onyangdol.site
+E330. 8003659902.site
+E331. email.cz
+E332. ns2-dns.com
+E333. ns3-dns.com
+E334. ddns.net
+E335. notfiled.com
+E336. courtgova.site
+E337. jimloamfilling.online
+E338. nowpropitup.com
+E339. fluoxi.com
+E340. prot-ukr.net
+E341. www.virustotal.com [aka virustotal.com]
+E342. dcshost.net
+E343. d-upl.ddns.net
+E344. star-cz.ddns.net
+E345. ln-upl.ddns.net
+E346. single-office.ddns.net
+E347. internet.bs
+E348. int-ukr.net
+E349. internetcygane.ru
+E350. erinekenney.com
+E351. listen.servemp3.com
+E352. servemp3.com
+E353. winscp.net
+E354. survefuz.com
+E355. freedynamicdns.org
+E356. viewdns.net
+E357. badpdf.com
+E358. webk-telegram.sbs
+E359. webk-telegram.icu
+E360. podologaneri.it
+E361. a3-ukr.net
+E362. up-lnk.myftp.org
+E363. myftp.biz
+E364. up-dot.myftp.org
+E365. hopto.org
+E366. ua-cip.org
+E367. optica-rd.myftp.biz
+E368. ftp.thefoodplace.net
+E369. zapto.org
+E370. webhop.me
+E371. 4-t.me
+E372. myddns.me
+E373. fex.net
+E374. pge-ukr.net
+E375. v-ukr.net
+E376. api.dev-com.sc
+E377. advanced-ip-scaner.com
+E378. advanced-ip-scanners.com
+E379. foundpomoshi.com
+E380. ticket.cyberpolice.gov.ua
+E381. cloudlnk.org
+E382. dnslookup.seowebchecker.com
+E383. ipv6-wpnc.net
+E384. igshop.net
+E385. iqhost.ru
+E386. mx-out-14.default-host.net
+E387. m-vz.webhop.me
+E388. edisk.ukr.net
+E389. web-ukr.net
+E390. 0-ukr.net
+E391. k-ukr.net
+E392. uc-ukr.net
+E393. 2fa-ukr.net
+E394. brunoboys.net
+E395. redirectme.net
+E396. www.pierreagencement.fr
+E397. bourns.space
+E398. stormpredictor.host
+E399. getmod.host
+E400. syncapp.host
+E401. winchconstruction.com
+E402. winuvinnosluk.club
+E403. telegram.org.security.ohsxy.com
+E404. kohhd.com
+E405. security-check.telegram.org.ohsxy.com
+E406. ghaniyu.com
+E407. ns2.fountainrate.com
+E408. ns2.modeselling.com
+E409. ns2.oncetrips.com
+E410. billyhot.ru
+E411. s8.h.mchost.ru
+E412. advanced-ip-scanner.site
+E413. advanced-ip-scanner.click
+E414. advanced-ip-scanner.website
+E415. out-ukr.net
+E416. softloadup.com
+E417. blog.gocon.in
+Mentions:
+M1. "mlcrosoft.rf.gd" (Domain) — options: E1, E2, E3, E4
+M2. "beroozresaan.com" (Domain) — options: E10, E11, E12, E13
+M3. "tataguyz.co.za" (Domain) — options: E15, E19, E18, E20
+M4. "ifastnet.com" (Domain) — options: E25, E26, E27, E14
+M5. "nirsoft.me" (Domain) — options: E31, E2, E32, E33
+M6. "frge.io" (Domain) — options: E37, E38, E39, E40
+M7. "xcqef.ru" (Domain) — options: E8, E45, E46, E47
+M8. "kopratiso.ru" (Domain) — options: E53, E54, E55, E45
+M9. "cloue.link" (Domain) — options: E1, E60, E61, E53
+M10. "censys.io" (Domain) — options: E38, E40, E66, E67
+M11. "fex.net" (Domain) — options: E28, E71, E72, E73
+M12. "xsph.ru" (Domain) — options: E3, E50, E78, E79
+M13. "hilr.ru" (Domain) — options: E84, E85, E86, E45
+M14. "qkcew.ru" (Domain) — options: E3, E45, E90, E91
+M15. "nx0.ru" (Domain) — options: E50, E3, E45, E76
+M16. "mitlubald.ru" (Domain) — options: E91, E94, E45, E54
+M17. "milotrad.ru" (Domain) — options: E85, E6, E46, E45
+M18. "kesp.cl" (Domain) — options: E8, E97, E98, E99
+M19. "civh.ru" (Domain) — options: E6, E90, E45, E80
+M20. "criticalosl.tech" (Domain) — options: E64, E66, E104, E84
+M21. "ryomy.ru" (Domain) — options: E91, E45, E108, E87
+M22. "lnasfe.ru" (Domain) — options: E80, E54, E111, E45
+M23. "vdsina.ru" (Domain) — options: E84, E87, E113, E45
+M24. "rncsq.ru" (Domain) — options: E8, E117, E118, E45
+M25. "omyce.ru" (Domain) — options: E59, E45, E112, E91
+M26. "milotraf.ru" (Domain) — options: E85, E123, E94, E45
+M27. "shodan.io" (Domain) — options: E126, E127, E40, E80
+M28. "tgeo.link" (Domain) — options: E131, E37, E132, E97
+M29. "metanat.ru" (Domain) — options: E59, E53, E135, E45
+M30. "wicksl.ru" (Domain) — options: E139, E140, E141, E45
+M31. "mxukr.net" (Domain) — options: E50, E143, E144, E74
+M32. "telegraom.me" (Domain) — options: E147, E31, E148, E149
+M33. "lopasts.ru" (Domain) — options: E115, E117, E151, E45
+M34. "emterox.ru" (Domain) — options: E115, E154, E155, E45
+M35. "kilitro.ru" (Domain) — options: E53, E89, E45, E115
+M36. "moolin.ru" (Domain) — options: E124, E159, E160, E45
+M37. "coudzoom.ru" (Domain) — options: E91, E45, E161, E115
+M38. "domthr.xyz" (Domain) — options: E155, E163, E164, E165
+M39. "nxkad.ru" (Domain) — options: E3, E92, E94, E45
+M40. "hmgo.pw" (Domain) — options: E172, E140, E173, E84
+M41. "erwini.ru" (Domain) — options: E91, E140, E177, E45
+M42. "krasavchikoleg.net" (Domain) — options: E53, E8, E74, E178
+M43. "potrakit.ru" (Domain) — options: E53, E85, E152, E158
+M44. "gir.network" (Domain) — options: E181, E182, E28, E75
+M45. "github.com" (Domain) — options: E160, E185, E186, E187
+M46. "hawksi.ru" (Domain) — options: E54, E87, E45, E119
+M47. "kurapat.ru" (Domain) — options: E59, E97, E136, E45
+M48. "tg-me.pro" (Domain) — options: E97, E193, E194, E195
+M49. "alf-gos.top" (Domain) — options: E199, E175, E200, E201
+M50. "jokotras.ru" (Domain) — options: E59, E85, E205, E157
+M51. "peer-gos.top" (Domain) — options: E37, E54, E66, E175
+M52. "acteran.ru" (Domain) — options: E115, E208, E45, E53
+M53. "tme-id.ru" (Domain) — options: E80, E211, E97, E158
+M54. "mulleti.ru" (Domain) — options: E95, E190, E45, E91
+M55. "verofes.com" (Domain) — options: E15, E14, E214, E11
+M56. "borizhog.com" (Domain) — options: E217, E218, E219, E14
+M57. "zambeziz.com" (Domain) — options: E24, E221, E222, E223
+M58. "arentuk.com" (Domain) — options: E157, E225, E226, E14
+M59. "lesrochersblancs.com" (Domain) — options: E10, E15, E16, E229
+M60. "akaluij.com" (Domain) — options: E15, E225, E232, E14
+M61. "icanhazip.com" (Domain) — options: E28, E130, E100, E14
+M62. "agrikoz.com" (Domain) — options: E236, E53, E223, E14
+M63. "teiergam.com" (Domain) — options: E15, E155, E238, E14
+M64. "uabayrakua.com" (Domain) — options: E15, E16, E240, E14
+M65. "sansaispa.com" (Domain) — options: E15, E28, E242, E14
+M66. "ghaniyu.com" (Domain) — options: E15, E114, E185, E223
+M67. "ruvds.com" (Domain) — options: E80, E246, E26, E14
+M68. "apeduze.com" (Domain) — options: E51, E223, E249, E14
+M69. "expeditionabroad.com" (Domain) — options: E231, E16, E251, E14
+M70. "troadsecow.com" (Domain) — options: E236, E252, E16, E254
+M71. "zarabovannyok.eu" (Domain) — options: E91, E8, E258, E259
+M72. "baidencult.com" (Domain) — options: E261, E14, E91, E262
+M73. "benokij.com" (Domain) — options: E91, E157, E232, E14
+M74. "rresteraftin.com" (Domain) — options: E15, E265, E14, E10
+M75. "superboler.com" (Domain) — options: E15, E266, E267, E14
+M76. "thaibbqculver.com" (Domain) — options: E18, E271, E246, E14
+M77. "dezword.com" (Domain) — options: E172, E98, E184, E14
+M78. "rivertimad.com" (Domain) — options: E11, E274, E275, E14
+M79. "barbacoalosmartinez.com" (Domain) — options: E18, E16, E277, E14
+M80. "azartnyjboy.com" (Domain) — options: E24, E16, E234, E14
+M81. "axikok.com" (Domain) — options: E50, E218, E280, E14
+M82. "dogiraftig.com" (Domain) — options: E155, E282, E13, E14
+M83. "lingrevelat.com" (Domain) — options: E283, E15, E268, E31
+M84. "ereservices.com" (Domain) — options: E172, E285, E14, E286
+M85. "fluoxi.com" (Domain) — options: E287, E228, E130, E14
+M86. "vuxuancuong.com" (Domain) — options: E290, E291, E3, E292
+M87. "golgba.com" (Domain) — options: E217, E294, E14, E10
+M88. "azimurs.com" (Domain) — options: E24, E248, E295, E14
+M89. "zaikaopentra.com.ru" (Domain) — options: E157, E91, E298, E80
+M90. "anidoz.com" (Domain) — options: E28, E218, E14, E15
+M91. "agreminj.com" (Domain) — options: E217, E218, E14, E230
+M92. "dishsouq.com" (Domain) — options: E18, E15, E98, E303
+M93. "ansaigon.com" (Domain) — options: E15, E80, E235, E14
+M94. "erinekenney.com" (Domain) — options: E59, E215, E279, E14
+M95. "droopily.eu" (Domain) — options: E91, E54, E86, E274
+M96. "rivierafamily.com" (Domain) — options: E11, E307, E14, E87
+M97. "moskeet.com" (Domain) — options: E252, E160, E308, E14
+M98. "kissmafiabeforyoudied.eu" (Domain) — options: E309, E310, E3, E311
+M99. "chinagrill.co" (Domain) — options: E53, E23, E315, E111
+M100. "aluaadin.com" (Domain) — options: E11, E22, E222, E14
+M101. "shormanz.com" (Domain) — options: E217, E317, E128, E14
+M102. "servebeer.com" (Domain) — options: E18, E14, E178, E26
+M103. "bubenci.ru" (Domain) — options: E59, E45, E87, E115
+M104. "octoberoctopus.co.za" (Domain) — options: E18, E321, E171, E252
+M105. "fast-mail.site" (Domain) — options: E323, E324, E325, E326
+M106. "dyndns.com" (Domain) — options: E30, E332, E14, E333
+M107. "naffalno.site" (Domain) — options: E327, E328, E326, E335
+M108. "nafillimonilini.net" (Domain) — options: E28, E95, E74, E87
+M109. "noip.com" (Domain) — options: E130, E17, E338, E14
+M110. "onthewifi.com" (Domain) — options: E26, E255, E130, E14
+M111. "prostotaknet.net" (Domain) — options: E28, E194, E340, E341
+M112. "ddns.net" (Domain) — options: E26, E21, E343, E344
+M113. "internetcygane.ru" (Domain) — options: E80, E91, E347, E45
+M114. "tinyurl.com" (Domain) — options: E26, E268, E128, E14
+M115. "internet.bs" (Domain) — options: E37, E349, E28, E308
+M116. "serveftp.com" (Domain) — options: E351, E320, E352, E16
+M117. "freedynamicdns.net" (Domain) — options: E355, E26, E74, E334
+M118. "zbignef.com" (Domain) — options: E91, E357, E14, E26
+M119. "webknives.com" (Domain) — options: E28, E12, E358, E14
+M120. "aneria.net" (Domain) — options: E59, E172, E360, E74
+M121. "inter-webservices.com" (Domain) — options: E26, E215, E14, E172
+M122. "myftp.org" (Domain) — options: E362, E363, E364, E26
+M123. "igshop.net" (Domain) — options: E28, E342, E370, E74
+M124. "i1t.me" (Domain) — options: E31, E34, E32, E33
+M125. "plexbd.net" (Domain) — options: E28, E373, E75, E74
+M126. "ip-api.com" (Domain) — options: E376, E377, E378, E339
+M127. "photobucket.com" (Domain) — options: E190, E16, E105, E14
+M128. "cloudflare-dns.com" (Domain) — options: E126, E332, E333, E244
+M129. "viewdns.net" (Domain) — options: E126, E30, E334, E74
+M130. "dcshost.net" (Domain) — options: E172, E384, E385, E74
+M131. "webhop.me" (Domain) — options: E387, E1, E33, E31
+M132. "ukr.net" (Domain) — options: E388, E389, E390, E42
+M133. "myddns.me" (Domain) — options: E26, E334, E33, E32
+M134. "bounceme.net" (Domain) — options: E28, E394, E395, E74
+M135. "netbin.host" (Domain) — options: E398, E131, E399, E400
+M136. "winscp.net" (Domain) — options: E172, E334, E384, E74
+M137. "ohsxy.com" (Domain) — options: E28, E403, E292, E404
+M138. "ns2-dns.com" (Domain) — options: E30, E333, E244, E288
+M139. "iqhost.ru" (Domain) — options: E8, E3, E410, E411
+M140. "advanced-ip-scanners.com" (Domain) — options: E377, E412, E130, E413
+M141. "outlook.com" (Domain) — options: E323, E185, E306, E415
+M142. "blopik.com" (Domain) — options: E91, E17, E417, E14
+M143. "serveirc.com" (Domain) — options: E172, E229, E14, E64
+
+=== RESPONSE (84.7s, in 11273 / out 14358 tok, stop) ===
+{"v":[{"m":"mlcrosoft.rf.gd","id":"NEW","g":"domain imitating Microsoft","p":"E2","r":"n"},{"m":"beroozresaan.com","id":"E216","g":null,"p":null,"r":null},{"m":"tataguyz.co.za","id":"E321","g":null,"p":null,"r":null},{"m":"ifastnet.com","id":"E308","g":null,"p":null,"r":null},{"m":"nirsoft.me","id":"E1","g":null,"p":null,"r":null},{"m":"frge.io","id":"E68","g":null,"p":null,"r":null},{"m":"xcqef.ru","id":"E3","g":null,"p":null,"r":null},{"m":"kopratiso.ru","id":"E152","g":null,"p":null,"r":null},{"m":"cloue.link","id":"E133","g":null,"p":null,"r":null},{"m":"censys.io","id":"E129","g":null,"p":null,"r":null},{"m":"fex.net","id":"E373","g":null,"p":null,"r":null},{"m":"xsph.ru","id":"E90","g":null,"p":null,"r":null},{"m":"hilr.ru","id":"E6","g":null,"p":null,"r":null},{"m":"qkcew.ru","id":"E8","g":null,"p":null,"r":null},{"m":"nx0.ru","id":"E92","g":null,"p":null,"r":null},{"m":"mitlubald.ru","id":"E123","g":null,"p":null,"r":null},{"m":"milotrad.ru","id":"E94","g":null,"p":null,"r":null},{"m":"kesp.cl","id":"NEW","g":"a domain","p":null,"r":null},{"m":"civh.ru","id":"E84","g":null,"p":null,"r":null},{"m":"criticalosl.tech","id":"E38","g":null,"p":null,"r":null},{"m":"ryomy.ru","id":"E59","g":null,"p":null,"r":null},{"m":"lnasfe.ru","id":"E117","g":null,"p":null,"r":null},{"m":"vdsina.ru","id":"E80","g":null,"p":null,"r":null},{"m":"rncsq.ru","id":"E47","g":null,"p":null,"r":null},{"m":"omyce.ru","id":"E108","g":null,"p":null,"r":null},{"m":"milotraf.ru","id":"E46","g":null,"p":null,"r":null},{"m":"shodan.io","id":"E318","g":null,"p":null,"r":null},{"m":"tgeo.link","id":"E63","g":null,"p":null,"r":null},{"m":"metanat.ru","id":"E97","g":null,"p":null,"r":null},{"m":"wicksl.ru","id":"E119","g":null,"p":null,"r":null},{"m":"mxukr.net","id":"NEW","g":"a domain","p":null,"r":null},{"m":"telegraom.me","id":"NEW","g":"domain imitating Telegram","p":"E32","r":"n"},{"m":"lopasts.ru","id":"E54","g":null,"p":null,"r":null},{"m":"emterox.ru","id":"E76","g":null,"p":null,"r":null},{"m":"kilitro.ru","id":"E85","g":null,"p":null,"r":null},{"m":"moolin.ru","id":"E95","g":null,"p":null,"r":null},{"m":"coudzoom.ru","id":"E301","g":null,"p":null,"r":null},{"m":"domthr.xyz","id":"NEW","g":"a domain","p":null,"r":null},{"m":"nxkad.ru","id":"E50","g":null,"p":null,"r":null},{"m":"hmgo.pw","id":"NEW","g":"a domain","p":"E173","r":"b"},{"m":"erwini.ru","id":"E87","g":null,"p":null,"r":null},{"m":"krasavchikoleg.net","id":"NEW","g":"a domain","p":null,"r":null},{"m":"potrakit.ru","id":"E57","g":null,"p":null,"r":null},{"m":"gir.network","id":"E37","g":null,"p":null,"r":null},{"m":"github.com","id":"E304","g":null,"p":null,"r":null},{"m":"hawksi.ru","id":"E140","g":null,"p":null,"r":null},{"m":"kurapat.ru","id":"E53","g":null,"p":null,"r":null},{"m":"tg-me.pro","id":"NEW","g":"domain imitating Telegram","p":"E32","r":"n"},{"m":"alf-gos.top","id":"NEW","g":"a domain","p":"E199","r":"n"},{"m":"jokotras.ru","id":"E125","g":null,"p":null,"r":null},{"m":"peer-gos.top","id":"NEW","g":"a domain","p":null,"r":null},{"m":"acteran.ru","id":"E48","g":null,"p":null,"r":null},{"m":"tme-id.ru","id":"NEW","g":"domain imitating Telegram","p":"E211","r":"v"},{"m":"mulleti.ru","id":"E124","g":null,"p":null,"r":null},{"m":"verofes.com","id":"E12","g":null,"p":null,"r":null},{"m":"borizhog.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"zambeziz.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"arentuk.com","id":"E262","g":null,"p":null,"r":null},{"m":"lesrochersblancs.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"akaluij.com","id":"E22","g":null,"p":null,"r":null},{"m":"icanhazip.com","id":"E297","g":null,"p":null,"r":null},{"m":"agrikoz.com","id":"E218","g":null,"p":null,"r":null},{"m":"teiergam.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"uabayrakua.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"sansaispa.com","id":"E235","g":null,"p":null,"r":null},{"m":"ghaniyu.com","id":"E406","g":null,"p":null,"r":null},{"m":"ruvds.com","id":"E116","g":null,"p":null,"r":null},{"m":"apeduze.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"expeditionabroad.com","id":"E256","g":null,"p":null,"r":null},{"m":"troadsecow.com","id":"E251","g":null,"p":null,"r":null},{"m":"zarabovannyok.eu","id":"NEW","g":"a domain","p":null,"r":null},{"m":"baidencult.com","id":"E271","g":null,"p":null,"r":null},{"m":"benokij.com","id":"E17","g":null,"p":null,"r":null},{"m":"rresteraftin.com","id":"E13","g":null,"p":null,"r":null},{"m":"superboler.com","id":"E10","g":null,"p":null,"r":null},{"m":"thaibbqculver.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"dezword.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"rivertimad.com","id":"E307","g":null,"p":null,"r":null},{"m":"barbacoalosmartinez.com","id":"E107","g":null,"p":null,"r":null},{"m":"azartnyjboy.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"axikok.com","id":"E237","g":null,"p":null,"r":null},{"m":"dogiraftig.com","id":"E265","g":null,"p":null,"r":null},{"m":"lingrevelat.com","id":"E11","g":null,"p":null,"r":null},{"m":"ereservices.com","id":"E215","g":null,"p":null,"r":null},{"m":"fluoxi.com","id":"E339","g":null,"p":null,"r":null},{"m":"vuxuancuong.com","id":"NEW","g":"a domain","p":"E291","r":"b"},{"m":"golgba.com","id":"E15","g":null,"p":null,"r":null},{"m":"azimurs.com","id":"E234","g":null,"p":null,"r":null},{"m":"zaikaopentra.com.ru","id":"E161","g":null,"p":null,"r":null},{"m":"anidoz.com","id":"E223","g":null,"p":null,"r":null},{"m":"agreminj.com","id":"E225","g":null,"p":null,"r":null},{"m":"dishsouq.com","id":"E186","g":null,"p":null,"r":null},{"m":"ansaigon.com","id":"E242","g":null,"p":null,"r":null},{"m":"erinekenney.com","id":"E350","g":null,"p":null,"r":null},{"m":"droopily.eu","id":"E258","g":null,"p":null,"r":null},{"m":"rivierafamily.com","id":"E274","g":null,"p":null,"r":null},{"m":"moskeet.com","id":"E27","g":null,"p":null,"r":null},{"m":"kissmafiabeforyoudied.eu","id":"E260","g":null,"p":null,"r":null},{"m":"chinagrill.co","id":"E18","g":null,"p":null,"r":null},{"m":"aluaadin.com","id":"E233","g":null,"p":null,"r":null},{"m":"shormanz.com","id":"E127","g":null,"p":null,"r":null},{"m":"servebeer.com","id":"E266","g":null,"p":null,"r":null},{"m":"bubenci.ru","id":"E91","g":null,"p":null,"r":null},{"m":"octoberoctopus.co.za","id":"E19","g":null,"p":null,"r":null},{"m":"fast-mail.site","id":"E25","g":null,"p":null,"r":null},{"m":"dyndns.com","id":"E26","g":null,"p":null,"r":null},{"m":"naffalno.site","id":"NEW","g":"a domain","p":null,"r":null},{"m":"nafillimonilini.net","id":"E177","g":null,"p":null,"r":null},{"m":"noip.com","id":"E100","g":null,"p":null,"r":null},{"m":"onthewifi.com","id":"E289","g":null,"p":null,"r":null},{"m":"prostotaknet.net","id":"NEW","g":"a domain","p":null,"r":null},{"m":"ddns.net","id":"E334","g":null,"p":null,"r":null},{"m":"internetcygane.ru","id":"E349","g":null,"p":null,"r":null},{"m":"tinyurl.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"internet.bs","id":"E347","g":null,"p":null,"r":null},{"m":"serveftp.com","id":"E14","g":null,"p":null,"r":null},{"m":"freedynamicdns.net","id":"NEW","g":"a domain","p":"E355","r":"v"},{"m":"zbignef.com","id":"E49","g":null,"p":null,"r":null},{"m":"webknives.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"aneria.net","id":"E28","g":null,"p":null,"r":null},{"m":"inter-webservices.com","id":"E285","g":null,"p":null,"r":null},{"m":"myftp.org","id":"NEW","g":"a domain","p":"E362","r":"b"},{"m":"igshop.net","id":"E384","g":null,"p":null,"r":null},{"m":"i1t.me","id":"E36","g":null,"p":null,"r":null},{"m":"plexbd.net","id":"E72","g":null,"p":null,"r":null},{"m":"ip-api.com","id":"E130","g":null,"p":null,"r":null},{"m":"photobucket.com","id":"E29","g":null,"p":null,"r":null},{"m":"cloudflare-dns.com","id":"E288","g":null,"p":null,"r":null},{"m":"viewdns.net","id":"E356","g":null,"p":null,"r":null},{"m":"dcshost.net","id":"E342","g":null,"p":null,"r":null},{"m":"webhop.me","id":"E370","g":null,"p":null,"r":null},{"m":"ukr.net","id":"E75","g":null,"p":null,"r":null},{"m":"myddns.me","id":"E372","g":null,"p":null,"r":null},{"m":"bounceme.net","id":"NEW","g":"a domain","p":null,"r":null},{"m":"netbin.host","id":"E181","g":null,"p":null,"r":null},{"m":"winscp.net","id":"E353","g":null,"p":null,"r":null},{"m":"ohsxy.com","id":"E279","g":null,"p":null,"r":null},{"m":"ns2-dns.com","id":"E332","g":null,"p":null,"r":null},{"m":"iqhost.ru","id":"E385","g":null,"p":null,"r":null},{"m":"advanced-ip-scanners.com","id":"E378","g":null,"p":null,"r":null},{"m":"outlook.com","id":"E280","g":null,"p":null,"r":null},{"m":"blopik.com","id":"E228","g":null,"p":null,"r":null},{"m":"serveirc.com","id":"E320","g":null,"p":null,"r":null}]}

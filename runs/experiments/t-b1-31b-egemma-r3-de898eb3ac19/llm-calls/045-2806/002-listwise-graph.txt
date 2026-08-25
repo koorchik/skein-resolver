@@ -1,0 +1,286 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 244 canonicals"
+Entities:
+E1. Mozilla
+E2. Snort
+E3. ./decpded_page.html
+E4. Internet Explorer
+E5. major.exe
+E6. ./перевірити діяльність.html
+E7. Safari
+E8. Joomla
+E9. ./рахунки ООО Спецстрой.xls.js
+E10. watchOS
+E11. Microsoft Equation Editor
+E12. 07.11.18р список.docx
+E13. VMware Workstation Pro
+E14. VMware Workstation Player
+E15. Corona-virus-Map.com.exe [aka CoronaMap.exe]
+E16. sserv.jpg
+E17. 223329.exe
+E18. ssj.jpg
+E19. WinExe
+E20. 62ea.exe
+E21. 966449.exe
+E22. PowerShell [aka powershell.exe]
+E23. crsse.exe
+E24. CVE-2018-8897
+E25. CVE-2017-17688
+E26. CVE-2017-17689
+E27. CVE-2017-0144
+E28. CVE-2018-8127
+E29. CVE-2017-0199
+E30. CVE-2017-14491
+E31. CVE-2018-8132
+E32. CVE-2018-8124
+E33. nslookup
+E34. Double Kill
+E35. OpenSSL
+E36. Tor
+E37. VPNFilter
+E38. Firefox
+E39. Firefox ESR
+E40. Windows SMBv1
+E41. Win32k
+E42. Windows [aka Microsoft Windows]
+E43. WinRAR
+E44. Windows 7
+E45. csrss.exe
+E46. spi.exe
+E47. cmd.exe
+E48. sysm.exe
+E49. ckZ89.ExE
+E50. RegAsm.exe
+E51. curl.exe
+E52. Информация.js
+E53. PO.jpg (EXE)
+E54. SSL 3.0
+E55. Microsoft Exchange Server
+E56. explorer.exe
+E57. Windows 10
+E58. Windows Vista
+E59. Windows Server 2008
+E60. Windows Host Compute Service Shim
+E61. Газпромбанк заказ.js
+E62. nginx
+E63. Apache
+E64. ChakraCore
+E65. tvOS
+E66. GreyEnergy
+E67. Компания.png
+E68. Petya
+E69. dnsmasq
+E70. Cisco IOS XE
+E71. iOS Mail
+E72. Cisco IOS
+E73. iPadOS
+E74. VMRC для Mac
+E75. iOS
+E76. Zoom
+E77. AZORult
+E78. Filezilla
+E79. Smokeloader
+E80. Propagate
+E81. CMS Drupal
+E82. Firefox для iOS
+E83. VMware Fusion Pro
+E84. Cisco FXOS
+E85. Microsoft Office Services and Web Apps
+E86. MS Excel
+E87. Microsoft Office 2016 [aka Office 2016]
+E88. MS PowerPoint
+E89. Microsoft Office 2010 [aka Office 2010]
+E90. Microsoft Edge
+E91. MS Word [aka Microsoft Word]
+E92. Microsoft Office 2013 [aka Office 2013]
+E93. S/MIME
+E94. Chipset Device Software
+E95. Microsoft SQL Server (MSSQL)
+E96. Microsoft Windows Server 2003
+E97. Microsoft Windows Server 2008 for 32-bit Systems SP2
+E98. Troldesh/Shade [aka Troldesh, Shade, Trojan.Encoder.858]
+E99. Thunderbird [aka Mozilla Thunderbird]
+E100. Gozi
+E101. OpenPGP [aka PGP]
+E102. WordPress
+E103. Qualys SSL Client Test
+E104. Linux
+E105. Adobe Framemaker
+E106. Adobe Reader DC
+E107. Adobe Acrobat Reader
+E108. Adobe Flash Player
+E109. Adobe Digital Editions
+E110. RDP Gateway Server
+E111. ADODB.Stream
+E112. Cisco Firepower Management Center (FMC)
+E113. WinRAR 5.70 Beta 1
+E114. zakon.rar
+E115. WinSCP
+E116. Apple Mail
+E117. Cisco Adaptive Security Appliance (ASA) Software
+E118. VMware Tools
+E119. Cisco IOS XR
+E120. Cisco NX-OS
+E121. EFAIL
+E122. Chrome
+E123. Mimikatz
+E124. MS Office [aka Microsoft Office]
+E125. DAAL
+E126. Heartbleed (CVE-2014-0160)
+E127. VMware Fusion
+E128. Sonoko
+E129. Adobe Experience Manager
+E130. Adobe Illustrator CC
+E131. WP Database Reset
+E132. Hashcat
+E133. Misha
+E134. Moonraker Petya
+E135. .NET Framework
+E136. needrestart
+E137. SNMP Subagent Stand-Alone for Windows
+E138. DigiCert Certificate Inspector
+E139. TeamViewer
+E140. rtlwifi driver
+E141. VMware ESXi
+E142. Drupalgeddon2
+E143. CDPwn
+E144. SMB протокол
+E145. Propagate/Unwaders
+E146. Remote Desktop Protocol (RDP)
+E147. Trojan:Win32/Sonoko.A!ms
+E148. Заявка.js
+E149. info.zip
+E150. inf.zip
+E151. Cisco Firepower Threat Defense (FTD) Software
+E152. Gazprombank.zakaz.docx.zip
+E153. рахунки компания технік.zip
+E154. documents (5).js
+E155. рахунки компания технік.lzh
+E156. GandCrab v4.1
+E157. Windows Remote Desktop Client
+E158. Cisco Discovery Protocol (CDP)
+E159. Schwarze-Sonne-Remote-Access-Trojan
+Mentions:
+M1. "AZORult" (Software) — options: E1, E2, E3, E4
+M2. "QUOTATION N0AB.doc" (Software) — options: E10, E11, E12, E13
+M3. "PO.jpg (EXE)" (Software) — options: E16, E17, E18, E19
+M4. "CVE-2017-11882" (Software) — options: E24, E25, E26, E27
+M5. "Outlook" (Software) — options: E4, E33, E1, E34
+M6. "Filezilla" (Software) — options: E1, E4, E34, E37
+M7. "WinSCP" (Software) — options: E40, E41, E42, E35
+M8. "curl.exe" (Software) — options: E45, E46, E17, E47
+M9. "spi.exe" (Software) — options: E45, E48, E17, E50
+M10. "ssj.jpg" (Software) — options: E7, E16, E52, E53
+M11. "crsse.exe" (Software) — options: E45, E17, E50, E49
+M12. "major.exe" (Software) — options: E4, E17, E56, E45
+M13. "Windows" (Software) — options: E40, E44, E57, E4
+M14. "sserv.jpg" (Software) — options: E7, E18, E53, E61
+M15. "sysm.exe" (Software) — options: E50, E45, E17, E46
+M16. "62ea.exe" (Software) — options: E45, E17, E46, E23
+M17. "Corona-virus-Map.com.exe" (Software) — options: E23, E50, E48, E17
+M18. "Linux" (Software) — options: E1, E35, E19, E3
+M19. "OpenPGP" (Software) — options: E35, E10, E66, E67
+M20. "RegAsm.exe" (Software) — options: E45, E48, E17, E46
+M21. "ckZ89.ExE" (Software) — options: E70, E47, E17, E4
+M22. "macOS" (Software) — options: E10, E65, E71, E72
+M23. "Joomla" (Software) — options: E1, E4, E76, E69
+M24. "Processor Graphics" (Software) — options: E35, E72, E80, E1
+M25. "MS Office" (Software) — options: E85, E86, E87, E4
+M26. "Chrome" (Software) — options: E1, E4, E64, E93
+M27. "Microsoft Exchange Server" (Software) — options: E4, E95, E90, E70
+M28. "WordPress" (Software) — options: E10, E35, E91, E7
+M29. "Mozilla" (Software) — options: E4, E99, E78, E7
+M30. "OpenSSL" (Software) — options: E1, E101, E72, E22
+M31. "nginx" (Software) — options: E1, E104, E3, E63
+M32. "Adobe Experience Manager" (Software) — options: E4, E1, E105, E106
+M33. "TeamViewer" (Software) — options: E65, E110, E111, E4
+M34. "WinRAR" (Software) — options: E4, E41, E113, E1
+M35. "Apache" (Software) — options: E1, E64, E116, E35
+M36. "Tor" (Software) — options: E1, E4, E65, E118
+M37. "Cisco IOS" (Software) — options: E70, E84, E35, E119
+M38. "S/MIME" (Software) — options: E121, E48, E122, E35
+M39. "XTBL" (Software) — options: E35, E125, E126, E4
+M40. "VMware ESXi" (Software) — options: E70, E72, E127, E118
+M41. "Zoom" (Software) — options: E7, E4, E8, E1
+M42. "Adobe Acrobat Reader" (Software) — options: E106, E109, E105, E4
+M43. "DAAL" (Software) — options: E7, E121, E81, E4
+M44. "Hashcat" (Software) — options: E1, E7, E133, E108
+M45. "Petya" (Software) — options: E7, E134, E4, E116
+M46. "Adobe Flash Player" (Software) — options: E4, E105, E14, E1
+M47. "dnsmasq" (Software) — options: E33, E71, E3, E1
+M48. "Adobe Framemaker" (Software) — options: E4, E108, E107, E1
+M49. "Snort" (Software) — options: E7, E128, E136, E1
+M50. "VPNFilter" (Software) — options: E35, E139, E78, E7
+M51. "Adobe Illustrator CC" (Software) — options: E4, E106, E105, E72
+M52. "VMware Fusion" (Software) — options: E83, E1, E141, E13
+M53. "Misha" (Software) — options: E7, E132, E98, E1
+M54. "EFAIL" (Software) — options: E4, E7, E116, E71
+M55. "CMS Drupal" (Software) — options: E142, E86, E74, E1
+M56. "Propagate" (Software) — options: E145, E144, E15, E110
+M57. "Sonoko" (Software) — options: E7, E1, E2, E147
+M58. "Adobe Digital Editions" (Software) — options: E4, E105, E11, E1
+M59. "Mimikatz" (Software) — options: E7, E133, E93, E1
+M60. "Gozi" (Software) — options: E7, E1, E10, E149
+M61. "VMware Workstation Pro" (Software) — options: E83, E14, E1, E127
+M62. "Chipset Device Software" (Software) — options: E64, E90, E151, E117
+M63. "inf.zip" (Software) — options: E149, E4, E152, E153
+M64. "info.zip" (Software) — options: E150, E52, E100, E153
+M65. "zakon.rar" (Software) — options: E69, E50, E43, E111
+M66. "SMB протокол" (Software) — options: E40, E81, E128, E35
+M67. "Gazprombank.zakaz.docx.zip" (Software) — options: E61, E150, E154, E149
+M68. "ADODB.Stream" (Software) — options: E4, E105, E106, E35
+M69. "GandCrab v4" (Software) — options: E156, E7, E132, E110
+M70. "Remote Desktop Protocol (RDP)" (Software) — options: E157, E158, E110, E139
+
+=== RESPONSE (67.6s, in 5238 / out 12615 tok, stop) ===
+{"v":[{"m":"AZORult","id":"NEW","g":"a malware family","p":null,"r":null},{"m":"QUOTATION N0AB.doc","id":"NEW","g":"a document file","p":null,"r":null},{"m":"PO.jpg (EXE)","id":"NEW","g":"an executable disguised as a JPG image","p":null,"r":null},{"m":"CVE-2017-11882","id":"NEW","g":"a vulnerability identifier","p":null,"r":null},{"m":"Outlook","id":"NEW","g":"Microsoft email client","p":"E124","r":"p"},{"m":"Filezilla","id":"NEW","g":"an FTP client","p":null,"r":null},{"m":"WinSCP","id":"NEW","g":"an SFTP and FTP client","p":null,"r":null},{"m":"curl.exe","id":"NEW","g":"a command-line tool for transferring data","p":null,"r":null},{"m":"spi.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"ssj.jpg","id":"NEW","g":"an image file","p":null,"r":null},{"m":"crsse.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"major.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"Windows","id":"NEW","g":"Microsoft operating system","p":"E44","r":"b"},{"m":"sserv.jpg","id":"NEW","g":"an image file","p":null,"r":null},{"m":"sysm.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"62ea.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"Corona-virus-Map.com.exe","id":"NEW","g":"a malicious executable file","p":null,"r":null},{"m":"Linux","id":"NEW","g":"an open-source operating system","p":null,"r":null},{"m":"OpenPGP","id":"NEW","g":"a cryptographic standard","p":null,"r":null},{"m":"RegAsm.exe","id":"NEW","g":"a Microsoft .NET assembly registration tool","p":null,"r":null},{"m":"ckZ89.ExE","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"macOS","id":"NEW","g":"Apple operating system for Macs","p":null,"r":null},{"m":"Joomla","id":"NEW","g":"a content management system","p":null,"r":null},{"m":"Processor Graphics","id":"NEW","g":"graphics processing hardware or driver","p":null,"r":null},{"m":"MS Office","id":"NEW","g":"Microsoft productivity suite","p":"E87","r":"b"},{"m":"Chrome","id":"NEW","g":"Google web browser","p":null,"r":null},{"m":"Microsoft Exchange Server","id":"NEW","g":"Microsoft mail server software","p":null,"r":null},{"m":"WordPress","id":"NEW","g":"a content management system","p":null,"r":null},{"m":"Mozilla","id":"NEW","g":"an open-source software organization","p":"E38","r":"b"},{"m":"OpenSSL","id":"NEW","g":"a cryptographic library","p":null,"r":null},{"m":"nginx","id":"NEW","g":"a web server","p":null,"r":null},{"m":"Adobe Experience Manager","id":"NEW","g":"Adobe content management system","p":null,"r":null},{"m":"TeamViewer","id":"NEW","g":"remote access software","p":null,"r":null},{"m":"WinRAR","id":"NEW","g":"an archive utility","p":"E113","r":"b"},{"m":"Apache","id":"NEW","g":"a web server","p":null,"r":null},{"m":"Tor","id":"NEW","g":"an anonymity network","p":null,"r":null},{"m":"Cisco IOS","id":"NEW","g":"Cisco network operating system","p":"E70","r":"b"},{"m":"S/MIME","id":"NEW","g":"a standard for public key encryption","p":null,"r":null},{"m":"XTBL","id":"NEW","g":"software or file format","p":null,"r":null},{"m":"VMware ESXi","id":"NEW","g":"VMware hypervisor","p":null,"r":null},{"m":"Zoom","id":"NEW","g":"a video conferencing tool","p":null,"r":null},{"m":"Adobe Acrobat Reader","id":"NEW","g":"Adobe PDF viewer","p":null,"r":null},{"m":"DAAL","id":"NEW","g":"Intel Data Analytics Accelerator Library","p":null,"r":null},{"m":"Hashcat","id":"NEW","g":"a password recovery tool","p":null,"r":null},{"m":"Petya","id":"NEW","g":"a ransomware family","p":null,"r":null},{"m":"Adobe Flash Player","id":"NEW","g":"Adobe multimedia software","p":null,"r":null},{"m":"dnsmasq","id":"NEW","g":"a lightweight DHCP and DNS server","p":null,"r":null},{"m":"Adobe Framemaker","id":"NEW","g":"Adobe desktop publishing software","p":null,"r":null},{"m":"Snort","id":"NEW","g":"an open-source network intrusion detection system","p":null,"r":null},{"m":"VPNFilter","id":"NEW","g":"a malware targeting network devices","p":null,"r":null},{"m":"Adobe Illustrator CC","id":"NEW","g":"Adobe vector graphics editor","p":null,"r":null},{"m":"VMware Fusion","id":"NEW","g":"VMware virtualization software for Mac","p":null,"r":null},{"m":"Misha","id":"NEW","g":"a ransomware family","p":null,"r":null},{"m":"EFAIL","id":"NEW","g":"an email security vulnerability exploit","p":null,"r":null},{"m":"CMS Drupal","id":"NEW","g":"a content management system","p":null,"r":null},{"m":"Propagate","id":"NEW","g":"a malware family","p":null,"r":null},{"m":"Sonoko","id":"NEW","g":"a malware family","p":null,"r":null},{"m":"Adobe Digital Editions","id":"NEW","g":"Adobe e-book reader","p":null,"r":null},{"m":"Mimikatz","id":"NEW","g":"a credential theft tool","p":null,"r":null},{"m":"Gozi","id":"NEW","g":"a banking Trojan","p":null,"r":null},{"m":"VMware Workstation Pro","id":"NEW","g":"VMware virtualization software","p":null,"r":null},{"m":"Chipset Device Software","id":"NEW","g":"hardware driver software","p":null,"r":null},{"m":"inf.zip","id":"NEW","g":"a zip archive file","p":null,"r":null},{"m":"info.zip","id":"NEW","g":"a zip archive file","p":null,"r":null},{"m":"zakon.rar","id":"NEW","g":"a rar archive file","p":null,"r":null},{"m":"SMB протокол","id":"NEW","g":"the Server Message Block protocol","p":null,"r":null},{"m":"Gazprombank.zakaz.docx.zip","id":"NEW","g":"a zip archive file","p":null,"r":null},{"m":"ADODB.Stream","id":"NEW","g":"an ActiveX object for data streaming","p":null,"r":null},{"m":"GandCrab v4","id":"NEW","g":"a version of GandCrab ransomware","p":"E156","r":"b"},{"m":"Remote Desktop Protocol (RDP)","id":"NEW","g":"a Microsoft proprietary protocol","p":null,"r":null}]}

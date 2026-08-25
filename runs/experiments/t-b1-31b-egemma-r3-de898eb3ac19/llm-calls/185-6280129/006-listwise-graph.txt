@@ -1,0 +1,599 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 1568 canonicals"
+Entities:
+E1. net-certificate.services
+E2. winscp.net
+E3. dwservice.net [aka www.dwservice.net]
+E4. notifications.certifiedauth.in
+E5. aleimportadora.net
+E6. res.certifiedauth.in
+E7. notifications.google2.certifiedauth.in
+E8. aneria.net
+E9. cuckoo.cert.ee
+E10. eumr.site
+E11. 3utilities.com
+E12. enlamentedeunasesor.com
+E13. dyndns.com [aka domtern.com]
+E14. 4qzm.com
+E15. enterwords.ru
+E16. serveftp.com [aka servehttp.com]
+E17. notfiled.com
+E18. trust-certificate.net
+E19. ddns.net
+E20. ns1.certifiedauth.in
+E21. ereservices.com
+E22. serveblog.net
+E23. ns2.certifiedauth.in
+E24. c.certifiedauth.in
+E25. certifiedauth.in
+E26. c6.certifiedauth.in
+E27. ssl.certifiedauth.in
+E28. account.certifiedauth.in
+E29. www.certifiedauth.in
+E30. accounts.certifiedauth.in
+E31. csp.certifiedauth.in
+E32. ssl.google2.certifiedauth.in
+E33. mail.certifiedauth.in
+E34. t.certifiedauth.in
+E35. ns.ns2-dns.com
+E36. ns2-dns.com
+E37. ns2.authcheck.in
+E38. ns2.authssl.in
+E39. civh.ru
+E40. net.ssl4.site
+E41. ssl1.site
+E42. lamazone.site
+E43. ssl2.site
+E44. ukr.net.ssl4.site
+E45. fast-mail.site
+E46. ssl3.site
+E47. docs.ukr.net.ssl4.site
+E48. mail-box.site
+E49. ogs.google2.certifiedauth.in
+E50. fonts.certifiedauth.in
+E51. ceriossl.info
+E52. login.certifiedauth.in
+E53. filebin.net
+E54. igshop.net
+E55. ukr.net
+E56. syncthing.net
+E57. windacarmelita.pw
+E58. com.authssl.site
+E59. ns1.authssl.site
+E60. ns2.authssl.site
+E61. authssl.in
+E62. gdocs.com.authssl.site
+E63. authssl.link
+E64. googie.com.authssl.site
+E65. ns3-dns.com
+E66. com.ssl3.site
+E67. ns.ns3-dns.com
+E68. net.ssl3.site
+E69. ssl4.site [aka www.ssl4.site]
+E70. ukr.net.ssl3.site
+E71. google.com.ssl3.site
+E72. ogs.certifiedauth.in
+E73. r4.res.certifiedauth.in
+E74. apis.certifiedauth.in
+E75. myaccount.certifiedauth.in
+E76. accounts.google2.certifiedauth.in [aka myaccount.google2.certifiedauth.in]
+E77. admin.certifiedauth.in
+E78. analytics.certifiedauth.in
+E79. net.ssl1.site
+E80. ukr.net.ssl1.site
+E81. share.ukr.net.ssl1.site
+E82. cisa.gov
+E83. logincdn.certifiedauth.in
+E84. static.certifiedauth.in
+E85. net.ssl4.online
+E86. ssl1.online
+E87. com.ssl4.online
+E88. xbeta.online
+E89. ssl2.online
+E90. ssl3.online
+E91. ukr.net.ssl4.online
+E92. googie.com.ssl4.online
+E93. tools.nexcess.net
+E94. plexbd.net
+E95. grafix.ne.jp
+E96. xcqef.ru
+E97. sytes.net
+E98. com.ssl2.site
+E99. net.ssl2.site
+E100. ukr.net.ssl2.site
+E101. gdrive.com.ssl2.site
+E102. data.syncthing.net
+E103. site-ukr.net
+E104. fex.net
+E105. accounts.personlog.in
+E106. accounts.binance.com.personlog.in
+E107. phymateus.online
+E108. authssl.online
+E109. melitaes.online
+E110. telecomds.online
+E111. barbatus.online
+E112. net.ssl3.online
+E113. com.ssl3.online
+E114. ssl4.online
+E115. ukr.net.ssl3.online
+E116. googie.com.ssl3.online
+E117. ns1.authssl.org
+E118. ns2.authssl.org
+E119. criticalosl.tech
+E120. www.authssl.in
+E121. authssl.site
+E122. www2.google2.certifiedauth.in
+E123. mail.google2.certifiedauth.in
+E124. google2.certifiedauth.in
+E125. lh3.google2.certifiedauth.in
+E126. www.google2.certifiedauth.in
+E127. content.google2.certifiedauth.in
+E128. finformservice.com
+E129. ser-ukr.net
+E130. nabufixservice.name
+E131. datagroup.ddns.net
+E132. d-upl.ddns.net
+E133. star-cz.ddns.net
+E134. ln-upl.ddns.net
+E135. single-office.ddns.net
+E136. ddnsking.com
+E137. viewdns.info
+E138. dnslookup.seowebchecker.com
+E139. com.ssl2.online
+E140. net.ssl2.online
+E141. ukr.net.ssl2.online
+E142. gdocs.com.ssl2.online
+E143. www2.certifiedauth.in
+E144. www.authcheck.in
+E145. qkcew.ru
+E146. cooperi.ru
+E147. cert.gov.ua
+E148. outlook.certifiedauth.in
+E149. misp.cert.gov.ua
+E150. kurapat.ru
+E151. arcor.de
+E152. shopersport.ru [aka vljsport.eu.com]
+E153. stats.certifiedauth.in
+E154. static.personlog.in
+E155. b.stats.certifiedauth.in
+E156. static.binance.com.personlog.in
+E157. bounceme.net
+E158. armpress.net
+E159. hopentools.ru
+E160. hopentools.site
+E161. iqhost.ru
+E162. netbin.host
+E163. mx-out-14.default-host.net
+E164. ns1.authssl.in
+E165. authssl.org
+E166. net.ssl1.online
+E167. ukr.net.ssl1.online
+E168. coagula.online
+E169. edisk.ukr.net.ssl1.online
+E170. nxkad.ru
+E171. infomalilopera.ru [aka infomailforyoumak.ru]
+E172. unayt.ru
+E173. abracodabugalimpopo.ru
+E174. redport80.ru
+E175. emterox.ru
+E176. acteran.ru
+E177. reg.ru
+E178. aspx.io
+E179. center-gos.top
+E180. cs1.wpc-v0cdn.org [aka wpc-v0cdn.org]
+E181. file.io
+E182. central-gos.top
+E183. nirsoft.me
+E184. frge.io
+E185. cloudflare-dns.com
+E186. numsecukr.net
+E187. cdn.exmo.day
+E188. cdn.certifiedauth.in
+E189. drive.google.com
+E190. cdn.live.com.getssl.click
+E191. cdn.discordapp.com
+E192. files-ukr.net
+E193. mockbin.org
+E194. pastebin.com
+E195. mivocloud.com
+E196. lonejade.com
+E197. cloudlnk.org
+E198. cloue.link
+E199. plengreg.fun
+E200. pge-ukr.net
+E201. 1-ukr.net
+E202. www.ssl2.in
+E203. net.ssl2.in
+E204. ukr.net.ssl2.in
+E205. ssl2.link
+E206. docs.ukr.net.ssl2.in
+E207. www.connectssl.in
+E208. com.connectssl.in
+E209. ns1.connectssl.in
+E210. ns2.connectssl.in
+E211. googie.com.connectssl.in
+E212. com.getssl.ink
+E213. docs.googie.com.connectssl.in
+E214. r4.res.exmo.day
+E215. drive.certifiedauth.in
+E216. r4.res.live.com.getssl.click
+E217. brunoboys.net
+E218. redirectme.net
+E219. www.pierreagencement.fr
+E220. bourns.space
+E221. winchconstruction.com
+E222. gir.network
+E223. hsts.online [aka www.hsts.online]
+E224. www.dropbox.com
+E225. www.adelaida.ua
+E226. devtools.bond
+E227. mst-ukr.net
+E228. viewdns.net
+E229. balerina.info
+E230. ukraine-chares.info
+E231. barvy-ukraines.info
+E232. familyvote.info
+E233. economiquity.org [aka europadonnaireland.org]
+E234. apitelegram.org
+E235. myftp.org
+E236. mitraseo.hol.es
+E237. mitlubald.ru
+E238. lnk.ukr-compens.xyz [aka pay.ukr-compens.xyz]
+E239. 1000020.xyz
+E240. duhodown.fun
+E241. uacompensation.xyz
+E242. blakejones.xyz
+E243. rbadm.top
+E244. uatax-compens.xyz
+E245. everything-everywhere.at.ply.gg
+E246. let-me.network
+E247. site-1.work
+E248. balletworld.co
+E249. hilr.ru
+E250. giraffe-tour.ru
+E251. geroiukr.site
+E252. 1833.site
+E253. 8003659902.site
+E254. rmssrv.ru
+E255. golgba.com
+E256. lo7h.com
+E257. dnspod.com
+E258. noip.com
+E259. tme-id.com
+E260. humanitarydp.ug
+E261. hudojniku-school.eu
+E262. hudojniku-school-ua.eu
+E263. school-hudojniku.eu
+E264. hudojnik.eu
+E265. school-uahudojniku.eu
+E266. vdsina.ru
+E267. hudojnikua-sch.eu
+E268. lingrevelat.com
+E269. enrollmentdm.com
+E270. detroito.ru
+E271. agreminj.com
+E272. petition-presidentu.com
+E273. arminext.com
+E274. outlook.com
+E275. tme-id.ru
+E276. yemmyusa.com
+E277. gmail.com
+E278. id.court.gov.ua
+E279. remala.id
+E280. xeontime.com
+E281. texlidia.com
+E282. kohhd.com
+E283. telegram-wed.id
+E284. jorgava.com
+E285. linedrv.com
+E286. github.com
+E287. sinergil.com
+E288. e-wwg.com
+E289. advanced-ip-scanner.website
+E290. yotsubasociety.website
+E291. email.cz
+E292. product-reviews.website
+E293. your-mail.press
+E294. outlook.live.com.exmo.day
+E295. outlook.outlook.live.com.exmo.day
+E296. outlook.live.com.getssl.click
+E297. outlook.exmo.day
+E298. atlantar.ru
+E299. military-ukraine.site
+E300. military-ukraine.online
+E301. inter-webservices.com
+E302. servepics.com
+E303. vtxhospital.com [aka crmeds.com]
+E304. geolocation.authcheck.in
+E305. ns1.authcheck.in
+E306. whoer.net
+E307. motocheck.in
+E308. baidenfree.com
+E309. anotepad.com
+E310. gofile.io
+E311. hotmail.com
+E312. notify-ukr.net
+E313. drv2ms.com
+E314. advanced-ip-scaner.com
+E315. thaibbqculver.com
+E316. docs.microsoft.com
+E317. evil.server.com
+E318. advanced-ip-scanners.com
+E319. info-cip.org
+E320. familyvote.co
+E321. balet-me.info
+E322. rivierafamily.com
+E323. vote-chary-telegram.info
+E324. progolosyi.info
+E325. 7tt.me
+E326. t.me
+E327. fernandoherrera.me
+E328. i1t.me
+E329. myvnc.com
+E330. ardeas.ru
+E331. reg-ukr.net
+E332. ryomy.ru
+E333. regs-ukr.net
+E334. lopasts.ru
+E335. diagnostic-resolver.com
+E336. rubidiumo.ru
+E337. webhop.me
+E338. m-vz.webhop.me
+E339. eurotelle.com
+E340. e-nas.firstcloudit.com
+E341. modeselling.com
+E342. dezword.com
+E343. ginaengg.com
+E344. www.portcheckers.com
+E345. petitionukraine.com
+E346. troadsecow.com
+E347. rivertimad.com
+E348. crash.syncthing.net
+E349. bubenci.ru
+E350. humanitarydp.ru
+E351. cityofuganda.ug
+E352. mayak.dp.ua
+E353. erwini.ru
+E354. gondurasonline.ug [aka gondurasonline.ru]
+E355. golosa-uahudojniku.eu
+E356. autodoka.com.ua
+E357. hudojnik-school.eu
+E358. golosa-uahhudojniku.eu
+E359. hudojniku.eu
+E360. golos-ua-hudojniku.eu
+E361. ganara.ru
+E362. ruvds.com
+E363. admus.top
+E364. topadm.top
+E365. arelyevennot.top
+E366. amo-opros.top [aka ao-opros.top]
+E367. coinerpay.top
+E368. hofsteder.ru
+E369. ukr-golosovane.site
+E370. ukr-golosovan.site
+E371. popuasyfromua.ru
+E372. konkur-golos-ua.eu
+E373. alegoomaster.com
+E374. www.facebook.com
+E375. balletmasters.co
+E376. metanat.ru
+E377. www.msftncsi.com
+E378. balletmasters.eu
+E379. azimurs.com
+E380. drive.gdocs.com.ssl2.online
+E381. arentuk.com
+E382. petition-president.com
+E383. raidforums.com
+E384. petitian-president.com
+E385. ns1.modeselling.com
+E386. ns2.modeselling.com
+E387. superboler.com
+E388. olminx.com
+E389. mod-ukr.net
+E390. ipodromlan.ru
+E391. anidoz.com
+E392. apoxipodes.ru
+E393. mulleti.ru
+E394. maluvani-ua.eu
+E395. malunki-uah.eu
+E396. maluvani-konkurs-ua.eu
+E397. konkurs-maluvani-ua.eu
+E398. malunki-ua.eu
+E399. benokij.com
+E400. vivianstyler.ru
+E401. tbwelo.ru
+E402. baletme.eu
+E403. chinagrill.co
+E404. detikievakonkurs.co
+E405. baletua.pro
+E406. courtgova.site
+E407. yavasponimayu.ru
+E408. hawksi.ru
+E409. ip-api.com [aka ipapi.co]
+E410. sansaispa.com
+E411. monopoliafromyou.ru
+E412. ipoluchayteudovolstvie.ru
+E413. againandagaingmorder.ru
+E414. www.personlog.in
+E415. m.personlog.in
+E416. com.personlog.in
+E417. api.personlog.in
+E418. bin.personlog.in
+E419. ns1.personlog.in
+E420. monitor.personlog.in
+E421. tacticalv.com
+E422. sav.com
+E423. lesrochersblancs.com
+E424. news-ukr.net
+E425. the-new-age.co.ua
+E426. big-uah.top
+E427. co-opros.top
+E428. an-ukr.top
+E429. ditinstvo-uah.pics [aka moe-ditinstvo-uah.pics]
+E430. bow-gos.top
+E431. agrikoz.com
+E432. akaluij.com
+E433. swinj.online
+E434. jasminvote.eu
+E435. candidar.ru
+E436. malvy-vote.life
+E437. protonmail.com
+E438. mail.google.com.getssl.click
+E439. docs.gdrive.com.authssl.site
+E440. mail-ukr.net
+E441. pomoshnikrbx.site
+E442. mail-gov-ua.frge.io
+E443. mail.arlingtonhousing.us
+Mentions:
+M1. "trust-certificate.net" (Domain) — options: E1, E2, E3, E4
+M2. "enrollmentdm.com" (Domain) — options: E10, E11, E12, E13
+M3. "net-certificate.services" (Domain) — options: E3, E18, E19, E20
+M4. "t.certifiedauth.in" (Domain) — options: E9, E24, E25, E26
+M5. "ssl.certifiedauth.in" (Domain) — options: E25, E31, E32, E9
+M6. "secure.certifiedauth.in" (Domain) — options: E25, E29, E28, E34
+M7. "ns2.certifiedauth.in" (Domain) — options: E35, E36, E20, E25
+M8. "certifiedauth.in" (Domain) — options: E9, E24, E34, E28
+M9. "ssl4.site" (Domain) — options: E40, E41, E42, E43
+M10. "ogs.certifiedauth.in" (Domain) — options: E9, E6, E49, E1
+M11. "winscp.net" (Domain) — options: E53, E19, E54, E5
+M12. "authssl.site" (Domain) — options: E58, E48, E59, E60
+M13. "ssl3.site" (Domain) — options: E65, E41, E66, E67
+M14. "res.certifiedauth.in" (Domain) — options: E9, E72, E25, E73
+M15. "account.certifiedauth.in" (Domain) — options: E75, E30, E25, E76
+M16. "ssl1.site" (Domain) — options: E42, E43, E79, E48
+M17. "notifications.certifiedauth.in" (Domain) — options: E1, E7, E9, E25
+M18. "ssl4.online" (Domain) — options: E85, E86, E87, E88
+M19. "fex.net" (Domain) — options: E8, E93, E94, E55
+M20. "ssl2.site" (Domain) — options: E36, E41, E98, E35
+M21. "sytes.net" (Domain) — options: E56, E102, E103, E19
+M22. "accounts.certifiedauth.in" (Domain) — options: E9, E28, E76, E75
+M23. "hsts.online" (Domain) — options: E88, E107, E86, E89
+M24. "ssl3.online" (Domain) — options: E112, E86, E113, E65
+M25. "authssl.org" (Domain) — options: E61, E117, E118, E119
+M26. "ssl.google2.certifiedauth.in" (Domain) — options: E122, E123, E124, E27
+M27. "dwservice.net" (Domain) — options: E53, E8, E128, E5
+M28. "ddns.net" (Domain) — options: E13, E131, E132, E133
+M29. "viewdns.net" (Domain) — options: E137, E35, E19, E5
+M30. "ssl2.online" (Domain) — options: E36, E86, E139, E140
+M31. "www.certifiedauth.in" (Domain) — options: E25, E143, E126, E144
+M32. "cuckoo.cert.ee" (Domain) — options: E145, E146, E147, E39
+M33. "static.certifiedauth.in" (Domain) — options: E9, E153, E154, E25
+M34. "tools.nexcess.net" (Domain) — options: E35, E157, E158, E5
+M35. "dcshost.net" (Domain) — options: E3, E54, E161, E5
+M36. "authssl.in" (Domain) — options: E120, E63, E121, E164
+M37. "ssl1.online" (Domain) — options: E166, E89, E88, E90
+M38. "nx0.ru" (Domain) — options: E170, E96, E171, E172
+M39. "censys.io" (Domain) — options: E119, E178, E179, E180
+M40. "cdn.jsdelivr.net" (Domain) — options: E53, E185, E186, E187
+M41. "filebin.net" (Domain) — options: E162, E192, E5, E193
+M42. "cloudflare.com" (Domain) — options: E185, E195, E196, E197
+M43. "plexbd.net" (Domain) — options: E8, E104, E199, E5
+M44. "ssl2.in" (Domain) — options: E202, E203, E36, E204
+M45. "connectssl.in" (Domain) — options: E207, E208, E209, E210
+M46. "r4.res.certifiedauth.in" (Domain) — options: E6, E1, E74, E25
+M47. "bounceme.net" (Domain) — options: E8, E217, E218, E5
+M48. "www.dstruct.net" (Domain) — options: E3, E13, E221, E222
+M49. "viewdns.info" (Domain) — options: E228, E138, E229, E230
+M50. "cve.mitre.org" (Domain) — options: E119, E233, E165, E9
+M51. "domthr.xyz" (Domain) — options: E13, E238, E239, E240
+M52. "gir.network" (Domain) — options: E162, E246, E8, E247
+M53. "eumr.site" (Domain) — options: E48, E251, E252, E42
+M54. "kohhd.com" (Domain) — options: E240, E255, E256, E257
+M55. "hudojnik-school.eu" (Domain) — options: E39, E260, E261, E262
+M56. "enlamentedeunasesor.com" (Domain) — options: E268, E17, E11, E269
+M57. "arentuk.com" (Domain) — options: E270, E271, E272, E13
+M58. "tme-id.com" (Domain) — options: E275, E276, E277, E278
+M59. "ginaengg.com" (Domain) — options: E255, E284, E285, E286
+M60. "sendmail.website" (Domain) — options: E45, E48, E289, E290
+M61. "outlook.com" (Domain) — options: E48, E277, E294, E295
+M62. "humanitarydp.ru" (Domain) — options: E260, E39, E266, E298
+M63. "ereservices.com" (Domain) — options: E3, E301, E13, E254
+M64. "authcheck.in" (Domain) — options: E138, E304, E144, E305
+M65. "notfiled.com" (Domain) — options: E308, E309, E13, E128
+M66. "diagnostic-resolver.com" (Domain) — options: E313, E314, E315, E13
+M67. "familyvote.info" (Domain) — options: E319, E320, E137, E321
+M68. "myddns.me" (Domain) — options: E13, E19, E325, E326
+M69. "reg.ru" (Domain) — options: E199, E330, E331, E332
+M70. "ruvds.com" (Domain) — options: E266, E313, E303, E13
+M71. "webhook.site" (Domain) — options: E48, E45, E337, E252
+M72. "e-wwg.com" (Domain) — options: E339, E255, E340, E136
+M73. "expeditionabroad.com" (Domain) — options: E344, E345, E346, E13
+M74. "krasavchikoleg.net" (Domain) — options: E150, E145, E5, E348
+M75. "humanitarydp.ug" (Domain) — options: E39, E350, E249, E351
+M76. "school-uahudojniku.eu" (Domain) — options: E261, E263, E355, E356
+M77. "vdsina.ru" (Domain) — options: E39, E353, E361, E171
+M78. "admru.top" (Domain) — options: E353, E363, E332, E243
+M79. "ukr-golosovanie.site" (Domain) — options: E368, E266, E369, E103
+M80. "www.michiganmastereltiempo.com" (Domain) — options: E280, E224, E373, E344
+M81. "drimzis.com" (Domain) — options: E313, E379, E189, E13
+M82. "baidencult.com" (Domain) — options: E308, E13, E349, E381
+M83. "modeselling.com" (Domain) — options: E385, E386, E339, E136
+M84. "dnspod.com" (Domain) — options: E390, E266, E342, E138
+M85. "maluvani-uah.eu" (Domain) — options: E39, E393, E394, E353
+M86. "ddnsking.com" (Domain) — options: E13, E341, E19, E3
+M87. "balletmasters.co" (Domain) — options: E378, E400, E373, E248
+M88. "gimnasikaua.site" (Domain) — options: E255, E10, E252, E406
+M89. "enterwords.ru" (Domain) — options: E270, E330, E175, E353
+M90. "icanhazip.com" (Domain) — options: E409, E258, E13, E8
+M91. "popuasyfromua.ru" (Domain) — options: E349, E173, E411, E171
+M92. "personlog.in" (Domain) — options: E414, E415, E416, E105
+M93. "dyndns.com" (Domain) — options: E35, E36, E16, E65
+M94. "new-tech-savvy.com" (Domain) — options: E318, E421, E422, E119
+M95. "co-uah.top" (Domain) — options: E39, E426, E427, E146
+M96. "agreminj.com" (Domain) — options: E284, E431, E13, E196
+M97. "familyvote.co" (Domain) — options: E17, E232, E434, E322
+M98. "patient-docs-mail.com" (Domain) — options: E48, E316, E277, E437
+M99. "mail-box.site" (Domain) — options: E45, E440, E293, E42
+
+=== RESPONSE (72.2s, in 10251 / out 11544 tok, stop) ===
+{"v":[{"m":"trust-certificate.net","id":"NEW","g":"domain trust-certificate.net","p":null,"r":null},{"m":"enrollmentdm.com","id":"NEW","g":"domain enrollmentdm.com","p":null,"r":null},{"m":"net-certificate.services","id":"NEW","g":"domain net-certificate.services","p":null,"r":null},{"m":"t.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"ssl.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"secure.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"ns2.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"certifiedauth.in","id":"NEW","g":"certifiedauth.in domain","p":null,"r":null},{"m":"ssl4.site","id":"NEW","g":"ssl4.site domain","p":null,"r":null},{"m":"ogs.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"winscp.net","id":"NEW","g":"winscp.net domain","p":null,"r":null},{"m":"authssl.site","id":"NEW","g":"authssl.site domain","p":null,"r":null},{"m":"ssl3.site","id":"NEW","g":"ssl3.site domain","p":null,"r":null},{"m":"res.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"account.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"ssl1.site","id":"NEW","g":"ssl1.site domain","p":null,"r":null},{"m":"notifications.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"ssl4.online","id":"NEW","g":"ssl4.online domain","p":null,"r":null},{"m":"fex.net","id":"NEW","g":"fex.net domain","p":null,"r":null},{"m":"ssl2.site","id":"NEW","g":"ssl2.site domain","p":null,"r":null},{"m":"sytes.net","id":"NEW","g":"sytes.net domain","p":null,"r":null},{"m":"accounts.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"hsts.online","id":"NEW","g":"hsts.online domain","p":null,"r":null},{"m":"ssl3.online","id":"NEW","g":"ssl3.online domain","p":null,"r":null},{"m":"authssl.org","id":"NEW","g":"authssl.org domain","p":null,"r":null},{"m":"ssl.google2.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"dwservice.net","id":"NEW","g":"dwservice.net domain","p":null,"r":null},{"m":"ddns.net","id":"NEW","g":"ddns.net domain","p":null,"r":null},{"m":"viewdns.net","id":"NEW","g":"viewdns.net domain","p":null,"r":null},{"m":"ssl2.online","id":"NEW","g":"ssl2.online domain","p":null,"r":null},{"m":"www.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"cuckoo.cert.ee","id":"NEW","g":"cuckoo.cert.ee domain","p":null,"r":null},{"m":"static.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"tools.nexcess.net","id":"NEW","g":"tools.nexcess.net domain","p":null,"r":null},{"m":"dcshost.net","id":"NEW","g":"dcshost.net domain","p":null,"r":null},{"m":"authssl.in","id":"NEW","g":"authssl.in domain","p":null,"r":null},{"m":"ssl1.online","id":"NEW","g":"ssl1.online domain","p":null,"r":null},{"m":"nx0.ru","id":"NEW","g":"nx0.ru domain","p":null,"r":null},{"m":"censys.io","id":"NEW","g":"censys.io domain","p":null,"r":null},{"m":"cdn.jsdelivr.net","id":"NEW","g":"cdn.jsdelivr.net domain","p":null,"r":null},{"m":"filebin.net","id":"NEW","g":"filebin.net domain","p":null,"r":null},{"m":"cloudflare.com","id":"NEW","g":"cloudflare.com domain","p":null,"r":null},{"m":"plexbd.net","id":"NEW","g":"plexbd.net domain","p":null,"r":null},{"m":"ssl2.in","id":"NEW","g":"ssl2.in domain","p":null,"r":null},{"m":"connectssl.in","id":"NEW","g":"connectssl.in domain","p":null,"r":null},{"m":"r4.res.certifiedauth.in","id":"NEW","g":"subdomain of certifiedauth.in","p":"E25","r":"p"},{"m":"bounceme.net","id":"NEW","g":"bounceme.net domain","p":null,"r":null},{"m":"www.dstruct.net","id":"NEW","g":"www.dstruct.net domain","p":null,"r":null},{"m":"viewdns.info","id":"NEW","g":"viewdns.info domain","p":null,"r":null},{"m":"cve.mitre.org","id":"NEW","g":"cve.mitre.org domain","p":null,"r":null},{"m":"domthr.xyz","id":"NEW","g":"domthr.xyz domain","p":null,"r":null},{"m":"gir.network","id":"NEW","g":"gir.network domain","p":null,"r":null},{"m":"eumr.site","id":"NEW","g":"eumr.site domain","p":null,"r":null},{"m":"kohhd.com","id":"NEW","g":"kohhd.com domain","p":null,"r":null},{"m":"hudojnik-school.eu","id":"E261","g":null,"p":null,"r":null},{"m":"enlamentedeunasesor.com","id":"NEW","g":"enlamentedeunasesor.com domain","p":null,"r":null},{"m":"arentuk.com","id":"NEW","g":"arentuk.com domain","p":null,"r":null},{"m":"tme-id.com","id":"NEW","g":"tme-id.com domain","p":null,"r":null},{"m":"ginaengg.com","id":"NEW","g":"ginaengg.com domain","p":null,"r":null},{"m":"sendmail.website","id":"NEW","g":"sendmail.website domain","p":null,"r":null},{"m":"outlook.com","id":"NEW","g":"outlook.com domain","p":null,"r":null},{"m":"humanitarydp.ru","id":"NEW","g":"humanitarydp.ru domain","p":null,"r":null},{"m":"ereservices.com","id":"NEW","g":"ereservices.com domain","p":null,"r":null},{"m":"authcheck.in","id":"NEW","g":"authcheck.in domain","p":null,"r":null},{"m":"notfiled.com","id":"NEW","g":"notfiled.com domain","p":null,"r":null},{"m":"diagnostic-resolver.com","id":"NEW","g":"diagnostic-resolver.com domain","p":null,"r":null},{"m":"familyvote.info","id":"NEW","g":"familyvote.info domain","p":null,"r":null},{"m":"myddns.me","id":"NEW","g":"myddns.me domain","p":null,"r":null},{"m":"reg.ru","id":"NEW","g":"reg.ru domain","p":null,"r":null},{"m":"ruvds.com","id":"NEW","g":"ruvds.com domain","p":null,"r":null},{"m":"webhook.site","id":"NEW","g":"webhook.site domain","p":null,"r":null},{"m":"e-wwg.com","id":"NEW","g":"e-wwg.com domain","p":null,"r":null},{"m":"expeditionabroad.com","id":"NEW","g":"expeditionabroad.com domain","p":null,"r":null},{"m":"krasavchikoleg.net","id":"NEW","g":"krasavchikoleg.net domain","p":null,"r":null},{"m":"humanitarydp.ug","id":"NEW","g":"humanitarydp.ug domain","p":null,"r":null},{"m":"school-uahudojniku.eu","id":"NEW","g":"school-uahudojniku.eu domain","p":null,"r":null},{"m":"vdsina.ru","id":"NEW","g":"vdsina.ru domain","p":null,"r":null},{"m":"admru.top","id":"NEW","g":"admru.top domain","p":null,"r":null},{"m":"ukr-golosovanie.site","id":"NEW","g":"ukr-golosovanie.site domain","p":null,"r":null},{"m":"www.michiganmastereltiempo.com","id":"NEW","g":"www.michiganmastereltiempo.com domain","p":null,"r":null},{"m":"drimzis.com","id":"NEW","g":"drimzis.com domain","p":null,"r":null},{"m":"baidencult.com","id":"NEW","g":"baidencult.com domain","p":null,"r":null},{"m":"modeselling.com","id":"NEW","g":"modeselling.com domain","p":null,"r":null},{"m":"dnspod.com","id":"NEW","g":"dnspod.com domain","p":null,"r":null},{"m":"maluvani-uah.eu","id":"NEW","g":"maluvani-uah.eu domain","p":null,"r":null},{"m":"ddnsking.com","id":"NEW","g":"ddnsking.com domain","p":null,"r":null},{"m":"balletmasters.co","id":"NEW","g":"balletmasters.co domain","p":null,"r":null},{"m":"gimnasikaua.site","id":"NEW","g":"gimnasikaua.site domain","p":null,"r":null},{"m":"enterwords.ru","id":"NEW","g":"enterwords.ru domain","p":null,"r":null},{"m":"icanhazip.com","id":"NEW","g":"icanhazip.com domain","p":null,"r":null},{"m":"popuasyfromua.ru","id":"NEW","g":"popuasyfromua.ru domain","p":null,"r":null},{"m":"personlog.in","id":"NEW","g":"personlog.in domain","p":null,"r":null},{"m":"dyndns.com","id":"NEW","g":"dyndns.com domain","p":null,"r":null},{"m":"new-tech-savvy.com","id":"NEW","g":"new-tech-savvy.com domain","p":null,"r":null},{"m":"co-uah.top","id":"NEW","g":"co-uah.top domain","p":null,"r":null},{"m":"agreminj.com","id":"NEW","g":"agreminj.com domain","p":null,"r":null},{"m":"familyvote.co","id":"NEW","g":"familyvote.co domain","p":null,"r":null},{"m":"patient-docs-mail.com","id":"NEW","g":"patient-docs-mail.com domain","p":null,"r":null},{"m":"mail-box.site","id":"NEW","g":"mail-box.site domain","p":null,"r":null}]}

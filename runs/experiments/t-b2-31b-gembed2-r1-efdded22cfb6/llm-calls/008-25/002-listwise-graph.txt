@@ -1,0 +1,132 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 47 canonicals"
+Entities:
+E1. Corona-virus-Map.com.exe
+E2. major.exe
+E3. Adobe Acrobat Reader
+E4. CoronaMap.exe
+E5. MS PowerPoint
+E6. Adobe Digital Editions
+E7. CVE-2020-3759
+E8. Adobe Experience Manager
+E9. CVE-2020-3760
+E10. AZORult
+E11. WordPress
+E12. MS Excel
+E13. Microsoft Equation Editor
+E14. WP Database Reset
+E15. Adobe Framemaker
+E16. CVE-2020-3757
+E17. Adobe Illustrator CC
+E18. Cisco FXOS
+E19. CVE-2020-3118
+E20. CVE-2020-3110
+E21. Microsoft Office 2013
+E22. CVE-2020-3111
+E23. Microsoft Office 2016
+E24. Microsoft Office 2010
+E25. CVE-2020-3119
+E26. Microsoft Office 2007
+E27. CVE-2020-7048
+E28. CVE-2020-3741
+E29. CVE-2020-7047
+E30. CVE-2020-3120
+E31. Cisco IOS XR
+E32. Cisco NX-OS
+E33. RWC 3 for Windows
+E34. VTune Amplifier for Windows
+E35. Chipset Device Software
+E36. Adobe Reader DC
+E37. Adobe Flash Player
+E38. MS Word
+E39. DAAL
+E40. SNMP Subagent Stand-Alone for Windows
+E41. Processor Graphics
+E42. VMware Tools
+E43. Cisco Discovery Protocol (CDP)
+E44. PGMB New Order 18-2077.xlsx
+E45. MS Office
+Mentions:
+M1. "AZORult" (Software) — options: E1, E2, E3, E4
+M2. "CoronaMap.exe" (Software) — options: E1, E2, E10, E11
+M3. "Corona-virus-Map.com.exe" (Software) — options: E4, E10, E2, E15
+M4. "CVE-2017-11882" (Software) — options: E13, E19, E20, E21
+M5. "CVE-2020-7047" (Software) — options: E20, E25, E27, E22
+M6. "CVE-2020-7048" (Software) — options: E20, E19, E29, E25
+M7. "CVE-2020-3118" (Software) — options: E22, E20, E31, E25
+M8. "CVE-2020-3120" (Software) — options: E22, E20, E19, E25
+M9. "CVE-2020-3759" (Software) — options: E20, E22, E16, E25
+M10. "CVE-2020-3741" (Software) — options: E20, E22, E16, E19
+M11. "CVE-2020-3119" (Software) — options: E22, E19, E20, E30
+M12. "CVE-2020-3757" (Software) — options: E20, E22, E7, E25
+M13. "CVE-2020-3111" (Software) — options: E20, E19, E25, E30
+M14. "CVE-2020-3110" (Software) — options: E22, E19, E25, E30
+M15. "CVE-2020-3760" (Software) — options: E20, E22, E16, E19
+M16. "SNMP Subagent Stand-Alone for Windows" (Software) — options: E33, E34, E35, E5
+M17. "Adobe Acrobat Reader" (Software) — options: E36, E37, E15, E6
+M18. "VTune Amplifier for Windows" (Software) — options: E33, E39, E40, E6
+M19. "Chipset Device Software" (Software) — options: E41, E31, E42, E40
+M20. "MS Office" (Software) — options: E12, E24, E38, E5
+M21. "Adobe Flash Player" (Software) — options: E16, E15, E3, E36
+M22. "Cisco IOS XR" (Software) — options: E32, E18, E43, E22
+M23. "Cisco NX-OS" (Software) — options: E31, E18, E43, E33
+M24. "WordPress" (Software) — options: E14, E4, E38, E29
+M25. "Cisco FXOS" (Software) — options: E32, E31, E22, E43
+M26. "VMware Tools" (Software) — options: E40, E44, E35, E37
+M27. "major.exe" (Software) — options: E1, E4, E10, E26
+M28. "Processor Graphics" (Software) — options: E5, E18, E43, E38
+M29. "Adobe Illustrator CC" (Software) — options: E36, E15, E3, E37
+M30. "RWC 3 for Windows" (Software) — options: E38, E34, E36, E40
+
+=== RESPONSE (71.2s, in 2929 / out 8058 tok, stop) ===
+{"v":[{"m":"AZORult","id":"NEW","g":"stealer malware","p":null,"r":null},{"m":"CoronaMap.exe","id":"NEW","g":"malicious executable","p":null,"r":null},{"m":"Corona-virus-Map.com.exe","id":"NEW","g":"malicious executable","p":null,"r":null},{"m":"CVE-2017-11882","id":"NEW","g":"vulnerability in Microsoft Equation Editor","p":null,"r":null},{"m":"CVE-2020-7047","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-7048","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3118","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3120","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3759","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3741","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3119","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3757","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3111","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3110","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"CVE-2020-3760","id":"NEW","g":"vulnerability","p":null,"r":null},{"m":"SNMP Subagent Stand-Alone for Windows","id":"NEW","g":"Windows network management software","p":null,"r":null},{"m":"Adobe Acrobat Reader","id":"NEW","g":"PDF viewer software","p":"E36","r":"b"},{"m":"VTune Amplifier for Windows","id":"NEW","g":"performance analysis tool","p":null,"r":null},{"m":"Chipset Device Software","id":"NEW","g":"hardware driver software","p":null,"r":null},{"m":"MS Office","id":"NEW","g":"productivity software suite","p":"E21","r":"b"},{"m":"Adobe Flash Player","id":"NEW","g":"multimedia software platform","p":null,"r":null},{"m":"Cisco IOS XR","id":"NEW","g":"network operating system","p":null,"r":null},{"m":"Cisco NX-OS","id":"NEW","g":"network operating system","p":null,"r":null},{"m":"WordPress","id":"NEW","g":"content management system","p":"E14","r":"b"},{"m":"Cisco FXOS","id":"NEW","g":"network operating system","p":null,"r":null},{"m":"VMware Tools","id":"NEW","g":"virtualization utility suite","p":null,"r":null},{"m":"major.exe","id":"NEW","g":"malicious executable","p":null,"r":null},{"m":"Processor Graphics","id":"NEW","g":"hardware driver software","p":null,"r":null},{"m":"Adobe Illustrator CC","id":"NEW","g":"vector graphics editor","p":null,"r":null},{"m":"RWC 3 for Windows","id":"NEW","g":"software tool","p":null,"r":null}]}

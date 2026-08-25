@@ -1,0 +1,103 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 36 canonicals"
+Entities:
+E1. Google
+E2. Mozilla
+E3. Adobe
+E4. Microsoft
+E5. Linux Team
+E6. Фонд "Альянс Демократій"
+E7. Apple
+E8. Cloudflare Inc.
+E9. VirusTotal
+E10. IFES Україна
+E11. Робоча група відкритого складу (OEWG)
+E12. Група урядових експертів (GGE)
+E13. Естонський центр Східного партнерства (ECEAP)
+E14. ГО «Міжнародний університет цифрової безпеки»
+E15. Європейський Союз
+E16. Міжнародною фундацією виборчих систем (IFES)
+E17. Cisco
+E18. Національний технічний університет України «Київський політехнічний інститут імені Ігоря Сікорського»
+E19. FireEye
+E20. WordFence
+E21. BleepingComputer
+E22. Oracle
+E23. ООН
+E24. Intel
+E25. WebFactory Ltd
+E26. Realtek
+E27. Центр соціальних та маркетингових досліджень (SOCIS)
+E28. Група високого рівня
+E29. Університет Джона Хопкінса
+E30. Глобальна комісія зі стабільності кіберпростору (GCSC)
+E31. CybExer Technologies
+E32. Паризький форум миру
+Mentions:
+M1. "OptiData" (Organization) — options: E1, E2, E3, E4
+M2. "Центр соціальних та маркетингових досліджень (SOCIS)" (Organization) — options: E10, E11, E12, E13
+M3. "Oracle" (Organization) — options: E1, E7, E8, E19
+M4. "Google" (Organization) — options: E8, E3, E7, E22
+M5. "Realtek" (Organization) — options: E24, E7, E3, E17
+M6. "Microsoft" (Organization) — options: E1, E9, E3, E24
+M7. "Apple" (Organization) — options: E1, E3, E17, E22
+M8. "Міжнародною фундацією виборчих систем (IFES)" (Organization) — options: E10, E14, E6, E11
+M9. "Національний технічний університет України «Київський політехнічний інститут імені Ігоря Сікорського»" (Organization) — options: E14, E29, E27, E30
+M10. "ГО «Міжнародний університет цифрової безпеки»" (Organization) — options: E10, E29, E31, E16
+M11. "Естонський центр Східного партнерства (ECEAP)" (Organization) — options: E15, E30, E32, E27
+M12. "Європейський Союз" (Organization) — options: E23, E28, E32, E18
+M13. "Фонд "Альянс Демократій"" (Organization) — options: E16, E30, E10, E27
+M14. "Глобальна комісія зі стабільності кіберпростору (GCSC)" (Organization) — options: E12, E13, E32, E16
+
+=== RESPONSE (41.3s, in 2261 / out 5370 tok, stop) ===
+{"v":[{"m":"OptiData","id":"NEW","g":"an organization","p":null,"r":null},{"m":"Центр соціальних та маркетингових досліджень (SOCIS)","id":"NEW","g":"a center for social and marketing research","p":null,"r":null},{"m":"Oracle","id":"NEW","g":"a software company","p":null,"r":null},{"m":"Google","id":"NEW","g":"a technology company","p":null,"r":null},{"m":"Realtek","id":"NEW","g":"a semiconductor company","p":null,"r":null},{"m":"Microsoft","id":"NEW","g":"a technology company","p":null,"r":null},{"m":"Apple","id":"NEW","g":"a technology company","p":null,"r":null},{"m":"Міжнародною фундацією виборчих систем (IFES)","id":"NEW","g":"an international foundation for electoral systems","p":"E10","r":"b"},{"m":"Національний технічний університет України «Київський політехнічний інститут імені Ігоря Сікорського»","id":"NEW","g":"a technical university in Ukraine","p":null,"r":null},{"m":"ГО «Міжнародний університет цифрової безпеки»","id":"NEW","g":"a university for digital security","p":null,"r":null},{"m":"Естонський центр Східного партнерства (ECEAP)","id":"NEW","g":"an Estonian center for Eastern Partnership","p":null,"r":null},{"m":"Європейський Союз","id":"NEW","g":"a political and economic union","p":null,"r":null},{"m":"Фонд \"Альянс Демократій\"","id":"NEW","g":"a foundation for democracy","p":null,"r":null},{"m":"Глобальна комісія зі стабільності кіберпростору (GCSC)","id":"NEW","g":"a commission on cyberspace stability","p":null,"r":null}]}

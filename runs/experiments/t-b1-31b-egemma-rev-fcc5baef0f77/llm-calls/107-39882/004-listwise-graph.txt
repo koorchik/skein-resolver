@@ -1,0 +1,469 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 396 canonicals"
+Entities:
+E1. LAKEFLASH
+E2. GAMMASTEEL [aka GammaSteel.PS1, GammaSteel.NET]
+E3. microsoft-cortana.exe
+E4. ProxyShell
+E5. STEELHOOK
+E6. USB.dll [aka Usb]
+E7. MARSSTEALER
+E8. CHISEL
+E9. PHP
+E10. oracle-java.exe
+E11. GRISELDA
+E12. Zimbra
+E13. MerlinAgent
+E14. plan_dsns.gov.ua.rar
+E15. Dante
+E16. POSEIDON
+E17. Гуманітарна катастрофа України з 24 лютого 2022 року.xls
+E18. IDCLIPNET_x86.dll
+E19. УКАЗ ПРЕЗИДЕНТА УКРАЇНИ №151_2022.mp4.lnk
+E20. Invoke-WebRequest
+E21. Інформація щодо наявності вакансій та їх укомплектування.xls
+E22. Алгоритм_LegalAid.xlsm
+E23. ResetEngine.dll
+E24. QUEUESEED
+E25. WinRAR CVE-2023-38831 [aka CVE-2023-38831]
+E26. cscript.exe
+E27. baseupd.exe
+E28. Windows_Security_Update_HxW
+E29. PowerShell [aka powershell.exe, PowerShell (powershell.exe)]
+E30. chrome_updater.dll
+E31. Windows_Security_Update_gMj
+E32. Windows_Security_Update_xBQ
+E33. Windows Script Host (wscript.exe) [aka wscript.exe, Windows Script Host]
+E34. write.exe
+E35. JavaScript
+E36. ArmyPlus.exe
+E37. Windows
+E38. ms-msdt.exe
+E39. b.exe
+E40. MSHTA [aka mshta.exe]
+E41. Microsoft Access
+E42. Microsoft Edge
+E43. Microsoft Defender [aka Windows Defender]
+E44. Microsoft Excel
+E45. MS Exchange [aka Microsoft Exchange Server]
+E46. java-sdk.exe
+E47. CCleaner.exe
+E48. icacls.exe
+E49. GraphSteel
+E50. GammaLoad.PS1
+E51. LUMMASTEALER
+E52. HarvesterX
+E53. MAGICSPELL
+E54. Outlook
+E55. StealDeal
+E56. Formbook
+E57. BZIP
+E58. LOADGRIP
+E59. CCleaner.zip
+E60. GrimPlant
+E61. LOGPIE
+E62. DELTA
+E63. Themida
+E64. GAMEDAY
+E65. dirbuster
+E66. JesterStealer
+E67. HVNC bot
+E68. ATERA
+E69. LOADERX3
+E70. Browsers
+E71. YARA
+E72. AsyncRAT
+E73. HeadLace
+E74. OpenPGP
+E75. NSSM
+E76. ssh.exe [aka SSH]
+E77. REVERSESSH
+E78. hostname
+E79. certutil
+E80. Cuba Ransomware
+E81. dnscmd
+E82. AUKILL
+E83. DOWNEX
+E84. install.msi
+E85. DarkTortilla
+E86. SearchEmbdIndex.ps1
+E87. SPARK
+E88. takeown
+E89. SDELETE
+E90. SENDEMAIL
+E91. PEAKLIGHT
+E92. RAR
+E93. SPECTR
+E94. Software Restriction Policies (SRP) [aka SRP]
+E95. SpecMon
+E96. Dark Crystal RAT (DCRAT) [aka DARKCRYSTALRAT (DCRAT), DarkCrystal RAT]
+E97. FileGrabber
+E98. FortiGate
+E99. Telegram
+E100. Screengrabber
+E101. BACKSTAB
+E102. GZIP
+E103. BidSwipe
+E104. VBScript
+E105. MEDUZASTEALER
+E106. REDLINESTEALER
+E107. CredoMap_v2
+E108. Meterpreter
+E109. shutdown
+E110. Bisonal
+E111. SIGTOP
+E112. Sysmon
+E113. Social.dll [aka Social]
+E114. SIEM
+E115. IDAT
+E116. MASEPIE
+E117. WRONGSENS
+E118. OpenSSH [aka OpenSSH server]
+E119. GHOSTPULSE
+E120. CLOGFLAG
+E121. FateGrab
+E122. OCEANMAP
+E123. HoaxPen
+E124. CredPump
+E125. ROTTENPOTATONG
+E126. LOADSHORT
+E127. loader.exe
+E128. LOADNEST
+E129. Loader.dll
+E130. HijackLoader
+E131. Minesweeper
+E132. SEAGLOW
+E133. GOST (Go Simple Tunnel)
+E134. BrownFlood
+E135. SECTOPRAT
+E136. ROSEBLOOM
+E137. InnoSetup
+E138. Python interpreter [aka Python]
+E139. OceanicTools
+E140. AgentTesla
+E141. PhotoMetadataHandler.dll
+E142. AutoIt [aka AutoIt3]
+E143. DWAgent
+E144. ACROBAIT
+E145. libcrypto.dll
+E146. ТЕНЕТА
+E147. RelicRace
+E148. WMIC
+E149. WHITECAT
+E150. CHERRYSPY
+E151. Nuclear Terrorism A Very Real Threat.rtf
+E152. AnyDesk
+E153. masscan
+E154. portable.exe
+E155. АСКОД
+E156. MeshCentral Assistant [aka MESHAGENT]
+E157. REMCOS [aka RemcosRAT, REMCOS RAT]
+E158. Ngrok
+E159. REGEORG.NEO
+E160. CodeMeter.exe
+E161. Desired State Configuration (DSC)
+E162. ROMFUSClient.exe
+E163. APERETIF
+E164. DROPCLUE
+E165. LONEPAGE
+E166. RC4
+E167. RelicSource
+E168. tasklist
+E169. BIASBOAT
+E170. browser.hta
+E171. HTA file
+E172. BitsTransfer
+E173. WEEVELY
+E174. PhpMyAdmin
+E175. PhantomTools
+E176. Python 2.7.18
+E177. Python Software Foundation BaseHTTP 0.6
+E178. Impacket
+E179. Protector.bat
+E180. EMPIREPAST
+E181. Log4Shell
+E182. P0wnyShell
+E183. XWORM
+E184. Signal
+E185. THUMBCHOP
+E186. EdgeOS
+E187. GOSSIPFLOW
+E188. gowitness
+E189. ConfuserEx
+E190. Viber
+E191. DirectAdmin
+E192. njRAT
+E193. CredoMap
+E194. scan.exe (CredoMap_v2)
+E195. Tor
+E196. Mikrotik
+E197. UpdateRarService
+E198. KAPEKA
+E199. HYDRA
+E200. UkrScanner.rar
+E201. CCleaner.rar
+E202. WinRAR
+E203. ESET_scanner.rar
+E204. shahed-136.rar
+E205. Vidar
+E206. ctlhost.exe
+E207. pfSense
+E208. XENORAT
+E209. BORE
+E210. Microsoft Office Word
+E211. 1.Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.exe
+E212. Електронний план евакуації.exe
+E213. Електронний план евакуації.rar
+E214. Пароль.vbe
+E215. 2.Витяг з реeстру вiд 24.07.2023р_Код документа 9312-0580-6944-3255.xls.js
+E216. ICYWELL
+E217. QuickMute
+E218. COOKBOX
+E219. RoarBat
+E220. AppLocker
+E221. passport.bat
+E222. RoyalRoad
+E223. news.bat
+E224. CROOKBAG
+E225. HoaxApe
+E226. ROSETHORN
+E227. RomCom
+E228. RemCom
+E229. Snake Keylogger
+E230. STILLARCH
+E231. rclone
+E232. ROMServer.exe
+E233. DARKTRACKRAT
+E234. VMProtect
+E235. DeliveryCheck
+E236. ScrubCrypt
+E237. Robocopy
+E238. SYSTEMBC
+E239. zapit.exe
+E240. KAZUAR
+E241. SHADOWLADDER
+E242. AwfulShred
+E243. DolphinCape
+E244. PinkyAgent
+E245. POEMGATE
+E246. ProxyLogon
+E247. Армія+
+E248. CaddyWiper
+E249. PyInstaller
+E250. Алгоритм дій членів сім’ї безвісти відсутнього військовослужбовця LegalAid.rar
+E251. Aid request COVID-19-04_5_22.xls
+E252. cmd.exe
+E253. rdp.exe
+E254. MSCommondll.exe
+E255. MSDriverLoader.exe
+E256. MSCommonDriver.exe
+E257. MSDriverMonitor.exe
+E258. MSCommonDriver.DCRat.exe
+E259. Browser.dll
+E260. Files.dll
+E261. Screen.dll
+E262. curl [aka curl.exe]
+E263. KB5017371.exe
+E264. UkrScanner.exe (SFX)
+E265. eset.yar
+E266. shellcode.x86.bin [aka shellcode.x86 (Cobalt Strike Beacon)]
+E267. RSYNC
+E268. systeminfo
+E269. Proxmox
+E270. Renci.SshNet
+E271. METASPLOIT
+E272. ANONVNC
+E273. Avast Free Antivirus
+E274. HANGTHREAD
+E275. weboffice.exe
+E276. Roundcube
+E277. LiteManager Pro - Server
+E278. Apache Log4j
+E279. PyArmor
+E280. Browser.ps1
+E281. Google Chrome
+E282. Google Authenticator [aka Microsoft Authenticator]
+E283. ESET Online Scanner.exe
+E284. HATVIBE
+E285. HFS HTTP File Server
+E286. guid.txt
+E287. omas-x-none.msp
+E288. MISP
+E289. Кропива
+E290. Webmin
+E291. CrescentImp
+Mentions:
+M1. "GraphSteel" (Software) — options: E1, E2, E3, E4
+M2. "GrimPlant" (Software) — options: E10, E11, E12, E13
+M3. "Aid request COVID-19-04_5_22.xls" (Software) — options: E17, E18, E19, E20
+M4. "base_update.exe" (Software) — options: E26, E27, E28, E29
+M5. "java-sdk.exe" (Software) — options: E26, E10, E35, E29
+M6. "microsoft-cortana.exe" (Software) — options: E40, E41, E42, E26
+M7. "oracle-java.exe" (Software) — options: E29, E46, E26, E47
+M8. "GAMMASTEEL" (Software) — options: E9, E49, E50, E40
+M9. "STEELHOOK" (Software) — options: E2, E54, E1, E55
+M10. "GZIP" (Software) — options: E9, E57, E1, E58
+M11. "GRISELDA" (Software) — options: E12, E8, E16, E60
+M12. "HarvesterX" (Software) — options: E1, E65, E66, E67
+M13. "HYDRA" (Software) — options: E1, E67, E71, E16
+M14. "OpenSSH" (Software) — options: E29, E74, E37, E75
+M15. "curl" (Software) — options: E9, E79, E80, E81
+M16. "STILLARCH" (Software) — options: E83, E84, E85, E1
+M17. "StealDeal" (Software) — options: E88, E66, E1, E89
+M18. "SPARK" (Software) — options: E1, E91, E92, E93
+M19. "FateGrab" (Software) — options: E1, E68, E97, E98
+M20. "BZIP" (Software) — options: E12, E102, E1, E103
+M21. "JesterStealer" (Software) — options: E105, E106, E1, E7
+M22. "Signal" (Software) — options: E109, E110, E111, E81
+M23. "pfSense" (Software) — options: E112, E29, E116, E117
+M24. "LAKEFLASH" (Software) — options: E91, E68, E120, E9
+M25. "OpenPGP" (Software) — options: E29, E118, E9, E122
+M26. "LOADGRIP" (Software) — options: E126, E1, E69, E127
+M27. "REDLINESTEALER" (Software) — options: E1, E105, E66, E7
+M28. "GOSSIPFLOW" (Software) — options: E1, E119, E132, E9
+M29. "SPECTR" (Software) — options: E91, E70, E95, E135
+M30. "ROSETHORN" (Software) — options: E1, E16, E136, E91
+M31. "PhantomTools" (Software) — options: E79, E139, E9, E140
+M32. "ScrubCrypt" (Software) — options: E1, E144, E145, E81
+M33. "Telegram" (Software) — options: E1, E121, E97, E9
+M34. "CHISEL" (Software) — options: E9, E148, E11, E12
+M35. "HANGTHREAD" (Software) — options: E1, E68, E151, E109
+M36. "BACKSTAB" (Software) — options: E1, E121, E6, E153
+M37. "LUMMASTEALER" (Software) — options: E91, E105, E1, E2
+M38. "EdgeOS" (Software) — options: E37, E132, E42, E112
+M39. "ConfuserEx" (Software) — options: E45, E9, E160, E161
+M40. "rclone" (Software) — options: E1, E81, E164, E165
+M41. "METASPLOIT" (Software) — options: E1, E168, E142, E40
+M42. "FileGrabber" (Software) — options: E121, E100, E37, E170
+M43. "PHP" (Software) — options: E173, E138, E174, E94
+M44. "Python interpreter" (Software) — options: E37, E108, E176, E29
+M45. "VMProtect" (Software) — options: E112, E178, E179, E98
+M46. "ICYWELL" (Software) — options: E148, E1, E53, E181
+M47. "MARSSTEALER" (Software) — options: E105, E66, E51, E40
+M48. "MEDUZASTEALER" (Software) — options: E40, E106, E51, E1
+M49. "SIGTOP" (Software) — options: E184, E81, E135, E114
+M50. "SEAGLOW" (Software) — options: E1, E91, E186, E187
+M51. "DOWNEX" (Software) — options: E45, E188, E109, E81
+M52. "dirbuster" (Software) — options: E6, E37, E52, E66
+M53. "Nmap" (Software) — options: E112, E122, E192, E193
+M54. "BORE" (Software) — options: E1, E148, E195, E67
+M55. "Ngrok" (Software) — options: E37, E192, E54, E98
+M56. "ATERA" (Software) — options: E40, E121, E197, E1
+M57. "RAR" (Software) — options: E200, E201, E202, E9
+M58. "Themida" (Software) — options: E12, E16, E55, E146
+M59. "GHOSTPULSE" (Software) — options: E1, E78, E91, E164
+M60. "XWORM" (Software) — options: E148, E208, E56, E1
+M61. "Кропива" (Software) — options: E12, E212, E198, E211
+M62. "JUICYPOTATONG" (Software) — options: E16, E125, E1, E169
+M63. "CROOKBAG" (Software) — options: E1, E218, E91, E120
+M64. "AwfulShred" (Software) — options: E1, E189, E119, E148
+M65. "RoarBat" (Software) — options: E221, E1, E222, E16
+M66. "Zimbra" (Software) — options: E148, E169, E71, E1
+M67. "Meterpreter" (Software) — options: E29, E66, E138, E123
+M68. "ROSEBLOOM" (Software) — options: E1, E91, E226, E134
+M69. "GLUEEGG" (Software) — options: E120, E1, E24, E164
+M70. "AUKILL" (Software) — options: E88, E142, E1, E85
+M71. "CLOGFLAG" (Software) — options: E1, E224, E231, E81
+M72. "OVERJAM" (Software) — options: E1, E9, E68, E99
+M73. "ValoHack" (Software) — options: E1, E233, E50, E9
+M74. "ACROBAIT" (Software) — options: E1, E91, E142, E41
+M75. "DarkTortilla" (Software) — options: E1, E233, E6, E96
+M76. "THUMBCHOP" (Software) — options: E12, E56, E111, E1
+M77. "CAPIBAR" (Software) — options: E88, E1, E198, E239
+M78. "HoaxPen" (Software) — options: E1, E225, E9, E128
+M79. "ffuf" (Software) — options: E1, E9, E242, E211
+M80. "HoaxApe" (Software) — options: E1, E123, E9, E73
+M81. "CrescentImp" (Software) — options: E1, E148, E124, E91
+M82. "PIEJET" (Software) — options: E16, E91, E89, E61
+M83. "MAGICSPELL" (Software) — options: E1, E216, E148, E181
+M84. "POSEIDON" (Software) — options: E91, E226, E9, E136
+M85. "Somnia" (Software) — options: E109, E37, E113, E6
+M86. "Fiddler" (Software) — options: E16, E190, E97, E1
+M87. "Алгоритм_LegalAid.xlsm" (Software) — options: E250, E50, E251, E75
+M88. "b.exe" (Software) — options: E26, E252, E127, E36
+M89. "loader.exe" (Software) — options: E254, E69, E129, E26
+M90. "MSDriverLoader.exe" (Software) — options: E254, E256, E257, E127
+M91. "CCleaner.exe" (Software) — options: E26, E201, E59, E127
+M92. "Windows" (Software) — options: E29, E43, E33, E28
+M93. "Loader.dll" (Software) — options: E6, E127, E259, E69
+M94. "MSDriverMonitor.exe" (Software) — options: E256, E258, E255, E36
+M95. "guid.txt" (Software) — options: E37, E115, E22, E26
+M96. "CodeMeter.exe" (Software) — options: E26, E47, E108, E36
+M97. "ESET Online Scanner.exe" (Software) — options: E203, E26, E47, E264
+M98. "SQLite.Interop.dll" (Software) — options: E6, E23, E34, E259
+M99. "libcrypto.dll" (Software) — options: E6, E259, E236, E261
+M100. "JavaScript" (Software) — options: E9, E104, E29, E46
+M101. "IDCLIPNET_x86.dll" (Software) — options: E6, E145, E129, E266
+M102. "Apache Log4j" (Software) — options: E98, E246, E181, E9
+M103. "Syncthing" (Software) — options: E37, E138, E267, E45
+M104. "ProxyShell" (Software) — options: E29, E15, E182, E181
+M105. "SmartAssembly .NET" (Software) — options: E147, E2, E270, E254
+M106. "AnyDesk" (Software) — options: E6, E140, E272, E37
+M107. "Webmin" (Software) — options: E112, E148, E275, E276
+M108. "PhotoMetadataHandler.dll" (Software) — options: E6, E259, E30, E113
+M109. "HFS HTTP File Server" (Software) — options: E45, E171, E9, E118
+M110. "Log4Shell" (Software) — options: E29, E1, E4, E9
+M111. "Proxmox" (Software) — options: E112, E246, E4, E37
+M112. "Browsers" (Software) — options: E37, E280, E259, E42
+M113. "NSIS (Nullsoft Scriptable Install System)" (Software) — options: E26, E33, E238, E84
+M114. "UkrScanner.exe (SFX)" (Software) — options: E200, E26, E36, E283
+M115. "HTA file" (Software) — options: E170, E284, E285, E40
+M116. "SIEM" (Software) — options: E112, E95, E184, E29
+M117. "Mikrotik" (Software) — options: E148, E163, E288, E9
+M118. "FortiGate" (Software) — options: E1, E245, E112, E78
+M119. "PhpMyAdmin" (Software) — options: E9, E191, E290, E279
+M120. "omas-x-none.msp" (Software) — options: E40, E272, E288, E45
+M121. "YARA" (Software) — options: E1, E199, E68, E88
+
+=== RESPONSE (71.2s, in 8350 / out 12864 tok, stop) ===
+{"v":[{"m":"GraphSteel","id":"E49","g":null,"p":null,"r":null},{"m":"GrimPlant","id":"E60","g":null,"p":null,"r":null},{"m":"Aid request COVID-19-04_5_22.xls","id":"E251","g":null,"p":null,"r":null},{"m":"base_update.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"java-sdk.exe","id":"E46","g":null,"p":null,"r":null},{"m":"microsoft-cortana.exe","id":"E3","g":null,"p":null,"r":null},{"m":"oracle-java.exe","id":"E10","g":null,"p":null,"r":null},{"m":"GAMMASTEEL","id":"E2","g":null,"p":null,"r":null},{"m":"STEELHOOK","id":"E5","g":null,"p":null,"r":null},{"m":"GZIP","id":"E102","g":null,"p":null,"r":null},{"m":"GRISELDA","id":"E11","g":null,"p":null,"r":null},{"m":"HarvesterX","id":"E52","g":null,"p":null,"r":null},{"m":"HYDRA","id":"E199","g":null,"p":null,"r":null},{"m":"OpenSSH","id":"E118","g":null,"p":null,"r":null},{"m":"curl","id":"E262","g":null,"p":null,"r":null},{"m":"STILLARCH","id":"E230","g":null,"p":null,"r":null},{"m":"StealDeal","id":"E55","g":null,"p":null,"r":null},{"m":"SPARK","id":"E87","g":null,"p":null,"r":null},{"m":"FateGrab","id":"E121","g":null,"p":null,"r":null},{"m":"BZIP","id":"E57","g":null,"p":null,"r":null},{"m":"JesterStealer","id":"E66","g":null,"p":null,"r":null},{"m":"Signal","id":"E184","g":null,"p":null,"r":null},{"m":"pfSense","id":"E207","g":null,"p":null,"r":null},{"m":"LAKEFLASH","id":"E1","g":null,"p":null,"r":null},{"m":"OpenPGP","id":"E74","g":null,"p":null,"r":null},{"m":"LOADGRIP","id":"E58","g":null,"p":null,"r":null},{"m":"REDLINESTEALER","id":"E106","g":null,"p":null,"r":null},{"m":"GOSSIPFLOW","id":"E187","g":null,"p":null,"r":null},{"m":"SPECTR","id":"E93","g":null,"p":null,"r":null},{"m":"ROSETHORN","id":"E226","g":null,"p":null,"r":null},{"m":"PhantomTools","id":"E175","g":null,"p":null,"r":null},{"m":"ScrubCrypt","id":"E236","g":null,"p":null,"r":null},{"m":"Telegram","id":"E99","g":null,"p":null,"r":null},{"m":"CHISEL","id":"E8","g":null,"p":null,"r":null},{"m":"HANGTHREAD","id":"E274","g":null,"p":null,"r":null},{"m":"BACKSTAB","id":"E101","g":null,"p":null,"r":null},{"m":"LUMMASTEALER","id":"E51","g":null,"p":null,"r":null},{"m":"EdgeOS","id":"E186","g":null,"p":null,"r":null},{"m":"ConfuserEx","id":"E189","g":null,"p":null,"r":null},{"m":"rclone","id":"E231","g":null,"p":null,"r":null},{"m":"METASPLOIT","id":"E271","g":null,"p":null,"r":null},{"m":"FileGrabber","id":"E97","g":null,"p":null,"r":null},{"m":"PHP","id":"E9","g":null,"p":null,"r":null},{"m":"Python interpreter","id":"E138","g":null,"p":null,"r":null},{"m":"VMProtect","id":"E234","g":null,"p":null,"r":null},{"m":"ICYWELL","id":"E216","g":null,"p":null,"r":null},{"m":"MARSSTEALER","id":"E7","g":null,"p":null,"r":null},{"m":"MEDUZASTEALER","id":"E105","g":null,"p":null,"r":null},{"m":"SIGTOP","id":"E111","g":null,"p":null,"r":null},{"m":"SEAGLOW","id":"E132","g":null,"p":null,"r":null},{"m":"DOWNEX","id":"E83","g":null,"p":null,"r":null},{"m":"dirbuster","id":"E65","g":null,"p":null,"r":null},{"m":"Nmap","id":"NEW","g":"network scanning tool","p":null,"r":null},{"m":"BORE","id":"E209","g":null,"p":null,"r":null},{"m":"Ngrok","id":"E158","g":null,"p":null,"r":null},{"m":"ATERA","id":"E68","g":null,"p":null,"r":null},{"m":"RAR","id":"E92","g":null,"p":null,"r":null},{"m":"Themida","id":"E63","g":null,"p":null,"r":null},{"m":"GHOSTPULSE","id":"E119","g":null,"p":null,"r":null},{"m":"XWORM","id":"E183","g":null,"p":null,"r":null},{"m":"Кропива","id":"E289","g":null,"p":null,"r":null},{"m":"JUICYPOTATONG","id":"NEW","g":"privilege escalation tool","p":null,"r":null},{"m":"CROOKBAG","id":"E224","g":null,"p":null,"r":null},{"m":"AwfulShred","id":"E242","g":null,"p":null,"r":null},{"m":"RoarBat","id":"E219","g":null,"p":null,"r":null},{"m":"Zimbra","id":"E12","g":null,"p":null,"r":null},{"m":"Meterpreter","id":"E108","g":null,"p":null,"r":null},{"m":"ROSEBLOOM","id":"E136","g":null,"p":null,"r":null},{"m":"GLUEEGG","id":"NEW","g":"malware","p":null,"r":null},{"m":"AUKILL","id":"E82","g":null,"p":null,"r":null},{"m":"CLOGFLAG","id":"E120","g":null,"p":null,"r":null},{"m":"OVERJAM","id":"NEW","g":"malware","p":null,"r":null},{"m":"ValoHack","id":"NEW","g":"game hack","p":null,"r":null},{"m":"ACROBAIT","id":"E144","g":null,"p":null,"r":null},{"m":"DarkTortilla","id":"E85","g":null,"p":null,"r":null},{"m":"THUMBCHOP","id":"E185","g":null,"p":null,"r":null},{"m":"CAPIBAR","id":"NEW","g":"malware","p":null,"r":null},{"m":"HoaxPen","id":"E123","g":null,"p":null,"r":null},{"m":"ffuf","id":"NEW","g":"web fuzzer","p":null,"r":null},{"m":"HoaxApe","id":"E225","g":null,"p":null,"r":null},{"m":"CrescentImp","id":"E291","g":null,"p":null,"r":null},{"m":"PIEJET","id":"NEW","g":"malware","p":null,"r":null},{"m":"MAGICSPELL","id":"E53","g":null,"p":null,"r":null},{"m":"POSEIDON","id":"E16","g":null,"p":null,"r":null},{"m":"Somnia","id":"NEW","g":"malware","p":null,"r":null},{"m":"Fiddler","id":"NEW","g":"web debugging proxy","p":null,"r":null},{"m":"Алгоритм_LegalAid.xlsm","id":"E22","g":null,"p":null,"r":null},{"m":"b.exe","id":"E39","g":null,"p":null,"r":null},{"m":"loader.exe","id":"E127","g":null,"p":null,"r":null},{"m":"MSDriverLoader.exe","id":"E255","g":null,"p":null,"r":null},{"m":"CCleaner.exe","id":"E47","g":null,"p":null,"r":null},{"m":"Windows","id":"E37","g":null,"p":null,"r":null},{"m":"Loader.dll","id":"E129","g":null,"p":null,"r":null},{"m":"MSDriverMonitor.exe","id":"E257","g":null,"p":null,"r":null},{"m":"guid.txt","id":"E286","g":null,"p":null,"r":null},{"m":"CodeMeter.exe","id":"E160","g":null,"p":null,"r":null},{"m":"ESET Online Scanner.exe","id":"E283","g":null,"p":null,"r":null},{"m":"SQLite.Interop.dll","id":"NEW","g":"library file","p":null,"r":null},{"m":"libcrypto.dll","id":"E145","g":null,"p":null,"r":null},{"m":"JavaScript","id":"E35","g":null,"p":null,"r":null},{"m":"IDCLIPNET_x86.dll","id":"E18","g":null,"p":null,"r":null},{"m":"Apache Log4j","id":"E278","g":null,"p":null,"r":null},{"m":"Syncthing","id":"NEW","g":"file synchronization software","p":null,"r":null},{"m":"ProxyShell","id":"E4","g":null,"p":null,"r":null},{"m":"SmartAssembly .NET","id":"NEW","g":"obfuscator","p":null,"r":null},{"m":"AnyDesk","id":"E152","g":null,"p":null,"r":null},{"m":"Webmin","id":"E290","g":null,"p":null,"r":null},{"m":"PhotoMetadataHandler.dll","id":"E141","g":null,"p":null,"r":null},{"m":"HFS HTTP File Server","id":"E285","g":null,"p":null,"r":null},{"m":"Log4Shell","id":"E181","g":null,"p":null,"r":null},{"m":"Proxmox","id":"E269","g":null,"p":null,"r":null},{"m":"Browsers","id":"E70","g":null,"p":null,"r":null},{"m":"NSIS (Nullsoft Scriptable Install System)","id":"NEW","g":"installer creation system","p":null,"r":null},{"m":"UkrScanner.exe (SFX)","id":"E264","g":null,"p":null,"r":null},{"m":"HTA file","id":"E171","g":null,"p":null,"r":null},{"m":"SIEM","id":"E114","g":null,"p":null,"r":null},{"m":"Mikrotik","id":"E196","g":null,"p":null,"r":null},{"m":"FortiGate","id":"E98","g":null,"p":null,"r":null},{"m":"PhpMyAdmin","id":"E174","g":null,"p":null,"r":null},{"m":"omas-x-none.msp","id":"E287","g":null,"p":null,"r":null},{"m":"YARA","id":"E71","g":null,"p":null,"r":null}]}

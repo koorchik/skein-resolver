@@ -1,0 +1,123 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 112 canonicals"
+Entities:
+E1. АТ "Укртелеком"
+E2. НАК «Нафтогаз України»
+E3. Ukrnet [aka Ukr.Net]
+E4. Департамент операцій з підтримки миру ООН
+E5. АТ "Укрзалізниця"
+E6. ООО "ГЛОБАЛ ИНТЕРНЕТ РЕШЕНИЯ"
+E7. ТОО "ИТ‑ГРАД"
+E8. Торрент-Толока
+E9. Usoris
+E10. ПрАТ «НЕК «Укренерго»
+E11. Нотаріальна палата України
+E12. Україна 24
+E13. ДП «Адміністрація морських портів України»
+E14. Світовий конґрес українців
+E15. Ukrinform [aka Українське національне інформаційне агентство "Укрінформ"]
+E16. Національний університет оборони України імені Івана Черняхівського
+E17. Київстар
+E18. STARK INDUSTRIES SOLUTIONS LTD [aka stark-industries.solutions]
+E19. iroko.net
+E20. Fortinet
+E21. iFastNet
+E22. Microsoft
+E23. ESET
+E24. 4vendeta
+E25. Matrix Telecom Ltd
+E26. AS37148 (нігерійський оператор телекомунікацій)
+E27. ООО "Трейдер софт"
+E28. ООО "ХОСТИНГ-ТЕХНОЛОГИИ"
+E29. Український союз промисловців та підприємців (УСПП)
+E30. Комісія з питань інформатизації, цифрової трансформації та запобігання кіберзлочинності Нотаріальної палати України
+E31. Telegram
+E32. Raidforums
+E33. ТСН
+E34. Discord
+E35. InfinityFree
+E36. ДП "НАІС"
+E37. nic.ru
+E38. cloudx.ru
+E39. iqhost.ru
+E40. macloud.ru
+E41. Strike Ready
+E42. Trend Micro [aka Trendmicro]
+E43. VirusTotal
+E44. Товариство Червоного Хреста
+E45. Namecheap
+E46. Центр оборонних стратегій
+E47. Nice-IT
+E48. DWService
+E49. 360Netlab
+E50. Internet Domain Service BS Corp.
+E51. SonarSource
+Mentions:
+M1. "ПрАТ «НЕК «Укренерго»" (Organization) — options: E1, E2, E3, E4
+M2. "НАК «Нафтогаз України»" (Organization) — options: E10, E11, E12, E13
+M3. "Ukrnet" (Organization) — options: E19, E20, E9, E15
+M4. "АТ "Укртелеком"" (Organization) — options: E17, E5, E10, E25
+M5. "Нотаріальна палата України" (Organization) — options: E29, E2, E30, E15
+M6. "Ukrinform" (Organization) — options: E31, E3, E12, E9
+M7. "АТ "Укрзалізниця"" (Organization) — options: E1, E10, E36, E6
+M8. "REG.RU" (Organization) — options: E37, E38, E39, E19
+M9. "Київстар" (Organization) — options: E15, E12, E43, E44
+M10. "ДП «Адміністрація морських портів України»" (Organization) — options: E11, E2, E36, E4
+M11. "Україна 24" (Organization) — options: E15, E5, E11, E17
+M12. "ДП "НАІС"" (Organization) — options: E47, E5, E13, E2
+M13. "Український союз промисловців та підприємців (УСПП)" (Organization) — options: E11, E4, E14, E30
+M14. "Національний університет оборони України імені Івана Черняхівського" (Organization) — options: E11, E46, E2, E15
+M15. "Світовий конґрес українців" (Organization) — options: E15, E2, E29, E1
+
+=== RESPONSE (51.8s, in 2551 / out 5822 tok, stop) ===
+{"v":[{"m":"ПрАТ «НЕК «Укренерго»","id":"NEW","g":"electric power transmission system operator in Ukraine","p":null,"r":null},{"m":"НАК «Нафтогаз України»","id":"NEW","g":"state-owned oil and gas company of Ukraine","p":null,"r":null},{"m":"Ukrnet","id":"NEW","g":"Ukrainian web portal","p":null,"r":null},{"m":"АТ \"Укртелеком\"","id":"NEW","g":"Ukrainian telecommunications company","p":null,"r":null},{"m":"Нотаріальна палата України","id":"NEW","g":"notary chamber of Ukraine","p":"E30","r":"b"},{"m":"Ukrinform","id":"NEW","g":"national news agency of Ukraine","p":null,"r":null},{"m":"АТ \"Укрзалізниця\"","id":"NEW","g":"Ukrainian state railway operator","p":null,"r":null},{"m":"REG.RU","id":"NEW","g":"Russian domain registrar","p":null,"r":null},{"m":"Київстар","id":"NEW","g":"Ukrainian mobile network operator","p":null,"r":null},{"m":"ДП «Адміністрація морських портів України»","id":"NEW","g":"state enterprise managing Ukrainian seaports","p":null,"r":null},{"m":"Україна 24","id":"NEW","g":"Ukrainian news channel","p":null,"r":null},{"m":"ДП \"НАІС\"","id":"NEW","g":"state enterprise for automation of information systems","p":null,"r":null},{"m":"Український союз промисловців та підприємців (УСПП)","id":"NEW","g":"Ukrainian union of industrialists and entrepreneurs","p":null,"r":null},{"m":"Національний університет оборони України імені Івана Черняхівського","id":"NEW","g":"military university in Ukraine","p":null,"r":null},{"m":"Світовий конґрес українців","id":"NEW","g":"international organization of Ukrainians","p":null,"r":null}]}

@@ -1,0 +1,233 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 116 canonicals"
+Entities:
+E1. CVE-2020-3259
+E2. CVE-2017-0199
+E3. Windows Server 2019
+E4. CVE-2020-3255
+E5. CVE-2020-0601
+E6. CVE-2017-11882
+E7. CVE-2020-3283
+E8. CVE-2020-0609
+E9. CVE-2020-3110
+E10. CVE-2019-0708
+E11. Cisco Discovery Protocol (CDP)
+E12. Windows Remote Desktop Client
+E13. Windows 2008 R2
+E14. RDP Gateway Server
+E15. Cisco Adaptive Security Appliance (ASA) Software
+E16. VMware Fusion Pro
+E17. Adobe Digital Editions
+E18. Microsoft Windows 7 for x64-based Systems SP1
+E19. Microsoft Windows Server 2008 for 32-bit Systems SP2
+E20. Microsoft Windows Server 2008 R2 for x64-based Systems SP1
+E21. Microsoft Windows Server 2008 for x64-based Systems SP2
+E22. Microsoft Windows Server 2008 R2 for Itanium-based Systems SP1
+E23. Windows 7
+E24. Microsoft Windows Server 2008 for Itanium-based Systems SP2
+E25. Microsoft Windows Server 2003
+E26. Windows [aka Microsoft Windows]
+E27. Microsoft Windows 7 for 32-bit Systems SP1
+E28. Windows Server 2008
+E29. Microsoft Windows XP
+E30. Windows Server 2012
+E31. Windows Server 2016
+E32. MS Word [aka Microsoft Word]
+E33. MS Office [aka Microsoft Office]
+E34. Microsoft Equation Editor
+E35. CVE-2020-3125
+E36. CVE-2020-0610
+E37. CVE-2020-0611
+E38. CVE-2020-3189
+E39. CVE-2020-3119
+E40. CVE-2020-3179
+E41. CVE-2020-3111
+E42. CVE-2020-3196
+E43. CVE-2020-3118
+E44. CVE-2020-3191
+E45. CVE-2020-3254
+E46. CVE-2020-3187
+E47. CVE-2020-3759
+E48. CVE-2020-3757
+E49. CVE-2020-3741
+E50. CVE-2020-7047
+E51. CVE-2020-3195
+E52. CVE-2020-7048
+E53. CVE-2020-3120
+E54. Cisco IOS XE
+E55. Cisco FXOS
+E56. Cisco IOS XR
+E57. Cisco Firepower Threat Defense (FTD) Software
+E58. iOS
+E59. Cisco NX-OS
+E60. Firefox для iOS
+E61. VMware Workstation Pro
+E62. VMware Fusion
+E63. VMware Workstation Player
+E64. VMware Tools
+E65. Cisco IOS
+E66. WP Database Reset
+E67. клієнти VMware Horizon для Mac
+E68. Windows 10
+E69. Windows Vista
+E70. watchOS
+E71. VMRC для Mac
+E72. iPadOS
+E73. tvOS
+E74. major.exe
+E75. Adobe Reader DC
+E76. Adobe Framemaker
+E77. Adobe Flash Player
+E78. Adobe Experience Manager
+E79. Adobe Illustrator CC
+E80. MS Excel
+E81. Microsoft Office 2010 [aka Office 2010]
+E82. MS PowerPoint
+E83. Microsoft Office 2016 [aka Office 2016]
+E84. Microsoft Office 2007 [aka Office 2007]
+E85. Microsoft Office 2013 [aka Office 2013]
+E86. macOS
+E87. Misha
+E88. ./decpded_page.html
+E89. CoronaMap.exe
+E90. Zoom
+E91. ./перевірити діяльність.html
+E92. Corona-virus-Map.com.exe
+E93. Adobe Acrobat Reader
+E94. AZORult
+E95. VMware ESXi
+E96. Firefox ESR
+E97. DAAL
+E98. Processor Graphics
+E99. SNMP Subagent Stand-Alone for Windows
+E100. RWC 3 for Windows
+E101. Chrome
+E102. Remote Desktop Protocol (RDP)
+E103. WordPress
+E104. Cisco Firepower Management Center (FMC)
+E105. nslookup
+E106. Chipset Device Software
+E107. whois
+E108. Firefox
+E109. Thunderbird
+Mentions:
+M1. "CVE-2019-0708" (Software) — options: E1, E2, E3, E4
+M2. "Remote Desktop Protocol (RDP)" (Software) — options: E10, E11, E12, E13
+M3. "Microsoft Windows 7 for 32-bit Systems SP1" (Software) — options: E18, E19, E20, E21
+M4. "Microsoft Windows 7 for x64-based Systems SP1" (Software) — options: E20, E27, E21, E19
+M5. "Microsoft Windows Server 2003" (Software) — options: E13, E26, E28, E29
+M6. "Microsoft Windows Server 2008 R2 for Itanium-based Systems SP1" (Software) — options: E24, E20, E21, E18
+M7. "Microsoft Windows Server 2008 R2 for x64-based Systems SP1" (Software) — options: E21, E22, E18, E19
+M8. "Microsoft Windows Server 2008 for 32-bit Systems SP2" (Software) — options: E21, E27, E24, E18
+M9. "Microsoft Windows Server 2008 for Itanium-based Systems SP2" (Software) — options: E21, E22, E19, E20
+M10. "Microsoft Windows Server 2008 for x64-based Systems SP2" (Software) — options: E20, E24, E18, E19
+M11. "Microsoft Windows XP" (Software) — options: E26, E23, E25, E18
+M12. "CVE-2020-0609" (Software) — options: E1, E4, E5, E35
+M13. "CVE-2020-0611" (Software) — options: E7, E35, E5, E36
+M14. "CVE-2020-0610" (Software) — options: E35, E7, E37, E5
+M15. "CVE-2017-0199" (Software) — options: E1, E6, E7, E10
+M16. "CVE-2020-3298" (Software) — options: E7, E1, E43, E5
+M17. "CVE-2020-0601" (Software) — options: E35, E1, E8, E40
+M18. "CVE-2020-3195" (Software) — options: E42, E46, E35, E44
+M19. "CVE-2020-3259" (Software) — options: E4, E45, E5, E7
+M20. "CVE-2020-3255" (Software) — options: E1, E45, E5, E7
+M21. "CVE-2020-3118" (Software) — options: E40, E35, E9, E5
+M22. "CVE-2020-3283" (Software) — options: E40, E46, E1, E5
+M23. "CVE-2017-11882" (Software) — options: E2, E7, E10, E43
+M24. "CVE-2020-3759" (Software) — options: E1, E40, E48, E5
+M25. "CVE-2020-3187" (Software) — options: E38, E5, E42, E9
+M26. "CVE-2020-7048" (Software) — options: E7, E35, E50, E5
+M27. "CVE-2020-3179" (Software) — options: E35, E39, E9, E5
+M28. "CVE-2020-3191" (Software) — options: E40, E42, E41, E51
+M29. "CVE-2020-3119" (Software) — options: E40, E35, E9, E5
+M30. "CVE-2020-7047" (Software) — options: E7, E35, E52, E5
+M31. "CVE-2020-3125" (Software) — options: E40, E53, E5, E7
+M32. "CVE-2020-3254" (Software) — options: E1, E4, E5, E7
+M33. "CVE-2020-3110" (Software) — options: E40, E35, E41, E5
+M34. "CVE-2020-3189" (Software) — options: E46, E39, E5, E42
+M35. "CVE-2020-3196" (Software) — options: E46, E44, E5, E40
+M36. "CVE-2020-3120" (Software) — options: E35, E40, E9, E5
+M37. "CVE-2020-3111" (Software) — options: E40, E35, E9, E5
+M38. "CVE-2020-3757" (Software) — options: E7, E40, E47, E5
+M39. "CVE-2020-3741" (Software) — options: E40, E7, E41, E47
+M40. "CVE-2020-3760" (Software) — options: E40, E7, E9, E47
+M41. "Cisco IOS" (Software) — options: E54, E55, E15, E56
+M42. "VMware ESXi" (Software) — options: E61, E62, E63, E64
+M43. "Windows" (Software) — options: E23, E68, E13, E69
+M44. "macOS" (Software) — options: E70, E71, E58, E72
+M45. "Adobe Acrobat Reader" (Software) — options: E75, E32, E76, E17
+M46. "MS Office" (Software) — options: E32, E80, E81, E82
+M47. "iOS" (Software) — options: E70, E65, E72, E54
+M48. "AZORult" (Software) — options: E87, E74, E88, E89
+M49. "Adobe Flash Player" (Software) — options: E23, E76, E63, E17
+M50. "Corona-virus-Map.com.exe" (Software) — options: E89, E94, E74, E87
+M51. "VMware Workstation Pro" (Software) — options: E63, E16, E62, E95
+M52. "WordPress" (Software) — options: E66, E26, E32, E89
+M53. "Hashcat" (Software) — options: E87, E77, E65, E97
+M54. "Chipset Device Software" (Software) — options: E98, E57, E15, E99
+M55. "VMware Workstation Player" (Software) — options: E61, E16, E77, E62
+M56. "Zoom" (Software) — options: E23, E101, E88, E102
+M57. "CoronaMap.exe" (Software) — options: E92, E74, E87, E101
+M58. "Adobe Experience Manager" (Software) — options: E104, E76, E75, E17
+M59. "whois" (Software) — options: E105, E26, E88, E87
+M60. "Adobe Illustrator CC" (Software) — options: E17, E75, E76, E32
+M61. "Chrome" (Software) — options: E23, E89, E106, E26
+M62. "Processor Graphics" (Software) — options: E32, E65, E16, E33
+M63. "Adobe Digital Editions" (Software) — options: E23, E76, E34, E32
+M64. "./decpded_page.html" (Software) — options: E91, E74, E76, E78
+M65. "Adobe Framemaker" (Software) — options: E32, E77, E93, E63
+M66. "VMware Fusion" (Software) — options: E16, E61, E95, E63
+M67. "Firefox" (Software) — options: E96, E60, E109, E62
+
+=== RESPONSE (72.8s, in 5100 / out 11221 tok, stop) ===
+{"v":[{"m":"CVE-2019-0708","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"Remote Desktop Protocol (RDP)","id":"NEW","g":"a communication protocol","p":null,"r":null},{"m":"Microsoft Windows 7 for 32-bit Systems SP1","id":"NEW","g":"32-bit version of Windows 7 SP1","p":"E23","r":"v"},{"m":"Microsoft Windows 7 for x64-based Systems SP1","id":"NEW","g":"64-bit version of Windows 7 SP1","p":"E23","r":"v"},{"m":"Microsoft Windows Server 2003","id":"NEW","g":"a server operating system","p":"E26","r":"v"},{"m":"Microsoft Windows Server 2008 R2 for Itanium-based Systems SP1","id":"NEW","g":"Itanium version of Windows Server 2008 R2 SP1","p":"E28","r":"v"},{"m":"Microsoft Windows Server 2008 R2 for x64-based Systems SP1","id":"NEW","g":"64-bit version of Windows Server 2008 R2 SP1","p":"E28","r":"v"},{"m":"Microsoft Windows Server 2008 for 32-bit Systems SP2","id":"NEW","g":"32-bit version of Windows Server 2008 SP2","p":"E28","r":"v"},{"m":"Microsoft Windows Server 2008 for Itanium-based Systems SP2","id":"NEW","g":"Itanium version of Windows Server 2008 SP2","p":"E28","r":"v"},{"m":"Microsoft Windows Server 2008 for x64-based Systems SP2","id":"NEW","g":"64-bit version of Windows Server 2008 SP2","p":"E28","r":"v"},{"m":"Microsoft Windows XP","id":"NEW","g":"an operating system","p":"E26","r":"v"},{"m":"CVE-2020-0609","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-0611","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-0610","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2017-0199","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3298","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-0601","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3195","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3259","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3255","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3118","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3283","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2017-11882","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3759","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3187","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-7048","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3179","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3191","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3119","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-7047","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3125","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3254","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3110","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3189","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3196","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3120","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3111","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3757","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3741","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"CVE-2020-3760","id":"NEW","g":"a vulnerability","p":null,"r":null},{"m":"Cisco IOS","id":"NEW","g":"an operating system","p":"E54","r":"b"},{"m":"VMware ESXi","id":"NEW","g":"a hypervisor","p":null,"r":null},{"m":"Windows","id":"NEW","g":"an operating system","p":"E23","r":"b"},{"m":"macOS","id":"NEW","g":"an operating system","p":"E67","r":"b"},{"m":"Adobe Acrobat Reader","id":"NEW","g":"a PDF viewer","p":null,"r":null},{"m":"MS Office","id":"NEW","g":"a software suite","p":"E81","r":"b"},{"m":"iOS","id":"NEW","g":"a mobile operating system","p":"E60","r":"b"},{"m":"AZORult","id":"NEW","g":"malware","p":null,"r":null},{"m":"Adobe Flash Player","id":"NEW","g":"a web browser plugin","p":null,"r":null},{"m":"Corona-virus-Map.com.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"VMware Workstation Pro","id":"NEW","g":"a virtualization software","p":null,"r":null},{"m":"WordPress","id":"NEW","g":"a content management system","p":null,"r":null},{"m":"Hashcat","id":"NEW","g":"a password recovery tool","p":null,"r":null},{"m":"Chipset Device Software","id":"NEW","g":"hardware drivers","p":null,"r":null},{"m":"VMware Workstation Player","id":"NEW","g":"a virtualization software","p":null,"r":null},{"m":"Zoom","id":"NEW","g":"a video conferencing tool","p":null,"r":null},{"m":"CoronaMap.exe","id":"NEW","g":"an executable file","p":null,"r":null},{"m":"Adobe Experience Manager","id":"NEW","g":"a content management system","p":null,"r":null},{"m":"whois","id":"NEW","g":"a network utility","p":null,"r":null},{"m":"Adobe Illustrator CC","id":"NEW","g":"a vector graphics editor","p":null,"r":null},{"m":"Chrome","id":"NEW","g":"a web browser","p":null,"r":null},{"m":"Processor Graphics","id":"NEW","g":"graphics hardware software","p":null,"r":null},{"m":"Adobe Digital Editions","id":"NEW","g":"an ebook reader","p":null,"r":null},{"m":"./decpded_page.html","id":"NEW","g":"an HTML file","p":null,"r":null},{"m":"Adobe Framemaker","id":"NEW","g":"a desktop publishing software","p":null,"r":null},{"m":"VMware Fusion","id":"NEW","g":"a virtualization software","p":"E16","r":"b"},{"m":"Firefox","id":"NEW","g":"a web browser","p":"E60","r":"b"}]}

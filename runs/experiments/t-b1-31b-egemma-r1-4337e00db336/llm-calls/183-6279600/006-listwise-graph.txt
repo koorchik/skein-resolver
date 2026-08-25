@@ -1,0 +1,434 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 1573 canonicals"
+Entities:
+E1. syncthing.net
+E2. data.syncthing.net
+E3. sytes.net
+E4. upgrades.syncthing.net
+E5. dcshost.net
+E6. crv-ukr.net
+E7. aleimportadora.net
+E8. bounceme.net
+E9. krasavchikoleg.net
+E10. crash.syncthing.net
+E11. datagroup.ddns.net
+E12. data.exmo.day
+E13. data.certifiedauth.in
+E14. ddns.net
+E15. ln-upl.ddns.net
+E16. modeselling.com
+E17. d-upl.ddns.net
+E18. aneria.net
+E19. syncapp.host
+E20. filebin.net
+E21. site-ukr.net
+E22. tools.nexcess.net
+E23. fex.net
+E24. igshop.net
+E25. ukr.net
+E26. windacarmelita.pw
+E27. armpress.net
+E28. webhop.me
+E29. brunoboys.net
+E30. redirectme.net
+E31. www.pierreagencement.fr
+E32. let-me.network
+E33. getmod.host
+E34. netbin.host
+E35. app.any.run
+E36. meteolink.host
+E37. stormpredictor.host
+E38. nx0.ru
+E39. xsph.ru
+E40. plexbd.net
+E41. grafix.ne.jp
+E42. telesecurity.org
+E43. tsecurity.sbs
+E44. center-gos.top [aka central-gos.top]
+E45. social.technet.microsoft.com
+E46. new-tech-savvy.com
+E47. chis-gos.top
+E48. tacticalv.com
+E49. civh.ru
+E50. dynamic.exmo.day
+E51. viewdns.net
+E52. gotdns.ch
+E53. as49447.net
+E54. plengreg.fun
+E55. t-me.io
+E56. aspx.io
+E57. file.io
+E58. frge.io
+E59. tg.cyou
+E60. gofile.io
+E61. hopentools.site
+E62. hopentools.ru
+E63. files-ukr.net
+E64. mockbin.org
+E65. pastebin.com
+E66. agreminj.com
+E67. 3utilities.com
+E68. serveftp.com
+E69. domtern.com
+E70. pas-ukr.net
+E71. 4qzm.com
+E72. blinkij.com
+E73. zambeziz.com
+E74. nxkad.ru
+E75. abracodabugalimpopo.ru
+E76. unayt.ru
+E77. redport80.ru
+E78. acteran.ru
+E79. reg.ru
+E80. againandagaingmorder.ru
+E81. site-1.work
+E82. balletworld.co
+E83. tgeo.link
+E84. giraffe-tour.ru
+E85. finformservice.com
+E86. serveblog.net
+E87. ser-ukr.net
+E88. nabufixservice.name
+E89. ereservices.com
+E90. gir.network
+E91. internetcygane.ru
+E92. inter-webservices.com
+E93. baletnet.eu
+E94. int-ukr.net
+E95. ifastnet.com
+E96. erinekenney.com
+E97. photobucket.com
+E98. apitelegram.org
+E99. i1t.me
+E100. authssl.org
+E101. bihei.eu
+E102. myftp.org
+E103. cloudlnk.org
+E104. iqhost.ru
+E105. freedynamicdns.net [aka freedynamicdns.org]
+E106. mx-out-14.default-host.net
+E107. whoer.net
+E108. economiquity.org
+E109. mitraseo.hol.es
+E110. bitbucket.org
+E111. shormanz.com
+E112. propertyiran.ir
+E113. censys.io
+E114. net.frge.io
+E115. ukr.net.frge.io
+E116. _.ukr.net.frge.io
+E117. kitten-268.frge.io
+E118. podologaneri.it
+E119. balerina.info
+E120. malvy-ukriane.info
+E121. me-cloud.link
+E122. telegram.org-a0dm91dk31i.cloue.link
+E123. claud.in
+E124. authssl.link
+E125. grabify.link
+E126. goaccount.link
+E127. ssl2.link [aka www.ssl2.link]
+E128. programasparapc.net
+E129. serveminecraft.net
+E130. netman.servehttp.com
+E131. www.dropbox.com
+E132. britxec.com
+E133. advanced-ip-scanners.com
+E134. www.facebook.com
+E135. bugiplaysec.com
+E136. www.michiganmastereltiempo.com
+E137. www.authssl.in
+E138. www.virustotal.com [aka virustotal.com]
+E139. dishsouq.com
+E140. raw.githubusercontent.com
+E141. gmail.com
+E142. easternexecutiveclub.com
+E143. let-me.life
+E144. let-me.world
+E145. balet-me.info
+E146. 7tt.me
+E147. t--t.me
+E148. balet-me.pro
+E149. 1000020.xyz
+E150. uacompensation.xyz
+E151. blakejones.xyz
+E152. uatax-compens.xyz [aka uatax-compenses.xyz]
+E153. bh-ukr.net
+E154. vh-ukr.net
+E155. 1-ukr.net
+E156. cloue.link
+E157. authssl.in
+E158. ns1.authssl.link
+E159. ns2.authssl.link
+E160. authssl.online
+E161. tg-me.pro
+E162. t.co
+E163. e-wwg.com
+E164. tbwelo.ru
+E165. ticket.cyberpolice.gov.ua
+E166. nafillimonilini.net
+E167. hilr.ru
+E168. successilin.top
+E169. fernandoherrera.me
+E170. c.certifiedauth.in
+E171. ns.ns3-dns.com [aka ns3-dns.com, cloudflare-dns.com]
+E172. ns2-dns.com
+E173. ns.ns2-dns.com
+E174. myddns.me
+E175. myvnc.com
+E176. 0-t.me
+E177. 4-t.me
+E178. telegram.org.t.me-cloud.link
+E179. nirsoft.me
+E180. 1833.site
+E181. geroiukr.site
+E182. m-vz.webhop.me
+E183. 8003659902.site
+E184. servehttp.com
+E185. premiumjeck.site
+E186. courtgova.site
+E187. drive.google.com
+E188. www.dstruct.net
+E189. mail-box.site
+E190. www.msftncsi.com
+E191. cooperi.ru
+E192. cert.gov.ua
+E193. outlook.certifiedauth.in
+E194. misp.cert.gov.ua
+E195. droopily.eu
+E196. arcor.de
+E197. vljsport.eu.com
+E198. vdsina.ru
+E199. internet.bs
+E200. kopratiso.ru
+E201. ua.aspx.io
+E202. aspe.ro
+E203. mil.ua.aspx.io
+E204. get.adobe.com.aspx.io [aka www.get.adobe.com.aspx.io]
+E205. gov.mil.ua.aspx.io
+E206. gov-ua.info
+E207. golos-ukr.info
+E208. info-cip.org
+E209. balet-ua.info
+E210. net.ssl3.site [aka ssl3.site]
+E211. com.ssl2.site
+E212. net.ssl2.site
+E213. ssl1.site
+E214. ssl2.in [aka www.ssl2.in]
+E215. ssl4.site [aka www.ssl4.site]
+E216. ukr.net.ssl2.site
+E217. gdrive.com.ssl2.site
+E218. numsecukr.net
+E219. cdn.exmo.day
+E220. cdn.certifiedauth.in
+E221. cdn.live.com.getssl.click
+E222. cdn.discordapp.com
+E223. blopik.com
+E224. benokij.com
+E225. akaluij.com
+E226. apokil.com
+E227. agrikoz.com
+E228. t-online.de
+E229. swinj.online
+E230. ssl2.online
+E231. melitaeas.online [aka melitaes.online]
+E232. xbeta.online
+E233. ssl1.online
+E234. ssl4.online
+E235. phymateus.online
+E236. elyslink.online
+E237. com.ssl4.online
+E238. net.ssl4.online
+E239. ssl3.online
+E240. ukr.net.ssl4.online
+E241. googie.com.ssl4.online
+E242. com.authssl.online
+E243. ns1.authssl.online
+E244. www.authssl.online
+E245. ns2.authssl.online
+E246. keewoolas.pw
+E247. kew.1qw.us
+E248. kesp.cl
+E249. ret.6bc.us
+E250. balet-ua.us
+E251. balet-me.us
+E252. me.gov.ua
+E253. answers.microsoft.com
+E254. docs.microsoft.com
+E255. portal.msrc.microsoft.com
+E256. mlcrosoft.rf.gd
+E257. www.catalog.update.microsoft.com
+E258. ns1.authssl.org
+E259. ns2.authssl.org
+E260. sec-t.info
+E261. authssl.site [aka com.authssl.site]
+E262. nais-gov.com
+E263. serveirc.com
+E264. store3.gofile.io
+E265. store1.gofile.io
+E266. store8.gofile.io
+E267. ns1.authssl.in
+E268. ns2.authssl.in
+E269. mivocloud.com
+E270. fluoxi.com
+E271. lonejade.com
+E272. ns2.fountainrate.com
+E273. dyndns.com
+E274. ns2.modeselling.com
+E275. ns2.oncetrips.com
+E276. ns2.vtxhospital.com
+E277. webhook.site
+E278. it-develop.me
+E279. t.me
+E280. myftp.biz
+E281. up-dot.myftp.org
+E282. up-lnk.myftp.org
+E283. hopto.org
+E284. array.myftp.biz
+E285. zapto.org
+E286. ua-cip.org
+E287. viewdns.info
+E288. sea-dobbiaco.bz.it
+E289. fudupdate.com
+E290. garagemusicschool.it
+E291. mod-ukr.net
+E292. dod-upload.dodortar.ru
+E293. e-nas.firstcloudit.com
+E294. ua-calendar.firstcloudit.com
+E295. cloudflare.com
+E296. baidencult.com
+E297. net.ssl2.link
+E298. telegram-click.ru
+E299. graphiuma.online
+E300. servepics.com
+E301. servegame.com
+E302. servemp3.com
+E303. servebeer.com
+E304. tronogram.com
+E305. prot-ukr.net
+E306. prostotaknet.net
+E307. progolosyi.info
+E308. microsoft.com
+Mentions:
+M1. "crash.syncthing.net" (Domain) — options: E1, E2, E3, E4
+M2. "data.syncthing.net" (Domain) — options: E1, E3, E10, E4
+M3. "upgrades.syncthing.net" (Domain) — options: E3, E1, E2, E10
+M4. "syncthing.net" (Domain) — options: E3, E10, E2, E4
+M5. "sytes.net" (Domain) — options: E14, E21, E7, E8
+M6. "winscp.net" (Domain) — options: E20, E14, E24, E7
+M7. "bounceme.net" (Domain) — options: E28, E29, E30, E7
+M8. "syncapp.host" (Domain) — options: E2, E33, E34, E35
+M9. "fex.net" (Domain) — options: E38, E39, E40, E25
+M10. "criticalosl.tech" (Domain) — options: E42, E43, E44, E45
+M11. "freedynamicdns.net" (Domain) — options: E14, E7, E50, E51
+M12. "plexbd.net" (Domain) — options: E14, E23, E54, E7
+M13. "censys.io" (Domain) — options: E55, E56, E44, E3
+M14. "tools.nexcess.net" (Domain) — options: E61, E38, E8, E27
+M15. "filebin.net" (Domain) — options: E60, E63, E7, E3
+M16. "pastebin.com" (Domain) — options: E20, E66, E67, E68
+M17. "nx0.ru" (Domain) — options: E39, E74, E75, E76
+M18. "gir.network" (Domain) — options: E32, E59, E81, E14
+M19. "dwservice.net" (Domain) — options: E14, E18, E85, E7
+M20. "internet.bs" (Domain) — options: E90, E14, E91, E92
+M21. "bitbucket.org" (Domain) — options: E72, E97, E98, E99
+M22. "dcshost.net" (Domain) — options: E14, E24, E104, E7
+M23. "cve.mitre.org" (Domain) — options: E42, E108, E100, E98
+M24. "shodan.io" (Domain) — options: E38, E111, E57, E56
+M25. "frge.io" (Domain) — options: E55, E114, E59, E57
+M26. "aneria.net" (Domain) — options: E3, E20, E118, E7
+M27. "cloue.link" (Domain) — options: E121, E122, E103, E123
+M28. "ipv6-wpnc.net" (Domain) — options: E14, E51, E128, E7
+M29. "netbin.host" (Domain) — options: E20, E14, E36, E33
+M30. "www.symantec.com" (Domain) — options: E131, E132, E133, E134
+M31. "github.com" (Domain) — options: E64, E139, E140, E67
+M32. "let-me.network" (Domain) — options: E90, E143, E144, E55
+M33. "domthr.xyz" (Domain) — options: E38, E59, E69, E149
+M34. "whoer.net" (Domain) — options: E51, E153, E25, E7
+M35. "authssl.link" (Domain) — options: E156, E157, E158, E103
+M36. "tg.cyou" (Domain) — options: E161, E162, E83, E49
+M37. "chernilis.win" (Domain) — options: E49, E38, E113, E166
+M38. "dyndns.com" (Domain) — options: E14, E171, E67, E17
+M39. "t.me" (Domain) — options: E147, E55, E176, E99
+M40. "webhook.site" (Domain) — options: E61, E28, E180, E181
+M41. "www.dropbox.com" (Domain) — options: E187, E134, E188, E102
+M42. "cuckoo.cert.ee" (Domain) — options: E14, E191, E192, E38
+M43. "internetcygane.ru" (Domain) — options: E198, E38, E199, E75
+M44. "aspx.io" (Domain) — options: E201, E55, E202, E203
+M45. "sec-t.info" (Domain) — options: E42, E206, E147, E43
+M46. "ssl2.site" (Domain) — options: E61, E210, E211, E212
+M47. "cdn.jsdelivr.net" (Domain) — options: E125, E218, E219, E220
+M48. "blinkij.com" (Domain) — options: E223, E224, E67, E225
+M49. "elyslink.online" (Domain) — options: E228, E229, E230, E231
+M50. "ssl4.online" (Domain) — options: E236, E233, E237, E228
+M51. "authssl.online" (Domain) — options: E236, E242, E232, E243
+M52. "kew.8df.us" (Domain) — options: E246, E247, E248, E249
+M53. "microsoft.com" (Domain) — options: E56, E253, E254, E255
+M54. "authssl.org" (Domain) — options: E42, E258, E157, E259
+M55. "sav.com" (Domain) — options: E68, E141, E262, E67
+M56. "file.io" (Domain) — options: E20, E60, E56, E58
+M57. "authssl.in" (Domain) — options: E43, E124, E100, E267
+M58. "cloudflare.com" (Domain) — options: E269, E171, E103, E270
+M59. "ns2-dns.com" (Domain) — options: E173, E171, E272, E51
+M60. "webhop.me" (Domain) — options: E182, E174, E277, E146
+M61. "myftp.org" (Domain) — options: E280, E281, E282, E68
+M62. "viewdns.net" (Domain) — options: E52, E287, E14, E7
+M63. "nod-update.it" (Domain) — options: E288, E289, E290, E118
+M64. "nas-files.firstcloudit.com" (Domain) — options: E293, E20, E294, E280
+M65. "grabify.link" (Domain) — options: E156, E124, E127, E121
+M66. "serveirc.com" (Domain) — options: E184, E300, E67, E301
+M67. "serveftp.com" (Domain) — options: E184, E67, E102, E263
+M68. "programasparapc.net" (Domain) — options: E20, E7, E304, E179
+M69. "nirsoft.me" (Domain) — options: E278, E308, E279, E146
+
+=== RESPONSE (47.6s, in 7351 / out 9299 tok, stop) ===
+{"v":[{"m":"crash.syncthing.net","id":"NEW","g":"a subdomain of syncthing.net","p":"E1","r":"p"},{"m":"data.syncthing.net","id":"NEW","g":"a subdomain of syncthing.net","p":"E1","r":"p"},{"m":"upgrades.syncthing.net","id":"NEW","g":"a subdomain of syncthing.net","p":"E1","r":"p"},{"m":"syncthing.net","id":"NEW","g":"a file synchronization service domain","p":null,"r":null},{"m":"sytes.net","id":"NEW","g":"a dynamic DNS service domain","p":null,"r":null},{"m":"winscp.net","id":"NEW","g":"a domain likely associated with WinSCP","p":null,"r":null},{"m":"bounceme.net","id":"NEW","g":"a domain for email bouncing services","p":null,"r":null},{"m":"syncapp.host","id":"NEW","g":"a domain used for application synchronization","p":null,"r":null},{"m":"fex.net","id":"NEW","g":"a file exchange service domain","p":null,"r":null},{"m":"criticalosl.tech","id":"NEW","g":"a technical domain","p":null,"r":null},{"m":"freedynamicdns.net","id":"NEW","g":"a free dynamic DNS provider","p":null,"r":null},{"m":"plexbd.net","id":"NEW","g":"a domain related to Plex BD","p":null,"r":null},{"m":"censys.io","id":"NEW","g":"a search engine for internet-connected devices","p":null,"r":null},{"m":"tools.nexcess.net","id":"NEW","g":"a tools subdomain for Nexcess","p":null,"r":null},{"m":"filebin.net","id":"NEW","g":"a file sharing service","p":null,"r":null},{"m":"pastebin.com","id":"NEW","g":"a text storage service","p":null,"r":null},{"m":"nx0.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"gir.network","id":"NEW","g":"a network services domain","p":null,"r":null},{"m":"dwservice.net","id":"NEW","g":"a remote control service domain","p":null,"r":null},{"m":"internet.bs","id":"NEW","g":"a domain for internet services","p":null,"r":null},{"m":"bitbucket.org","id":"NEW","g":"a Git code hosting service","p":null,"r":null},{"m":"dcshost.net","id":"NEW","g":"a hosting service domain","p":null,"r":null},{"m":"cve.mitre.org","id":"NEW","g":"the CVE list maintained by MITRE","p":null,"r":null},{"m":"shodan.io","id":"NEW","g":"a search engine for internet-connected devices","p":null,"r":null},{"m":"frge.io","id":"NEW","g":"a domain used for various subdomains","p":null,"r":null},{"m":"aneria.net","id":"NEW","g":"a domain for aneria.net","p":null,"r":null},{"m":"cloue.link","id":"NEW","g":"a link shortening or redirection domain","p":null,"r":null},{"m":"ipv6-wpnc.net","id":"NEW","g":"a domain for IPv6 services","p":null,"r":null},{"m":"netbin.host","id":"NEW","g":"a hosting service domain","p":null,"r":null},{"m":"www.symantec.com","id":"NEW","g":"the official website of Symantec","p":null,"r":null},{"m":"github.com","id":"NEW","g":"a software development platform","p":null,"r":null},{"m":"let-me.network","id":"NEW","g":"a domain let-me.network","p":null,"r":null},{"m":"domthr.xyz","id":"NEW","g":"a .xyz domain","p":null,"r":null},{"m":"whoer.net","id":"NEW","g":"a website for checking IP addresses","p":null,"r":null},{"m":"authssl.link","id":"NEW","g":"a domain for SSL certificates","p":null,"r":null},{"m":"tg.cyou","id":"NEW","g":"a domain for Telegram-related services","p":null,"r":null},{"m":"chernilis.win","id":"NEW","g":"a .win domain","p":null,"r":null},{"m":"dyndns.com","id":"NEW","g":"a dynamic DNS service","p":null,"r":null},{"m":"t.me","id":"NEW","g":"the short URL for Telegram","p":null,"r":null},{"m":"webhook.site","id":"NEW","g":"a website for testing webhooks","p":null,"r":null},{"m":"www.dropbox.com","id":"NEW","g":"the website of Dropbox","p":null,"r":null},{"m":"cuckoo.cert.ee","id":"NEW","g":"a security-related domain in Estonia","p":null,"r":null},{"m":"internetcygane.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"aspx.io","id":"NEW","g":"a domain used for redirection","p":null,"r":null},{"m":"sec-t.info","id":"NEW","g":"a security-related info domain","p":null,"r":null},{"m":"ssl2.site","id":"NEW","g":"a domain for SSL services","p":"E212","r":"b"},{"m":"cdn.jsdelivr.net","id":"NEW","g":"a content delivery network for JavaScript","p":null,"r":null},{"m":"blinkij.com","id":"NEW","g":"a domain blinkij.com","p":null,"r":null},{"m":"elyslink.online","id":"NEW","g":"a domain elyslink.online","p":null,"r":null},{"m":"ssl4.online","id":"NEW","g":"a domain for SSL services","p":"E237","r":"b"},{"m":"authssl.online","id":"NEW","g":"a domain for SSL certificates","p":"E242","r":"b"},{"m":"kew.8df.us","id":"NEW","g":"a domain kew.8df.us","p":null,"r":null},{"m":"microsoft.com","id":"NEW","g":"the official website of Microsoft","p":"E253","r":"b"},{"m":"authssl.org","id":"NEW","g":"a domain for SSL certificates","p":"E258","r":"b"},{"m":"sav.com","id":"NEW","g":"a domain registrar website","p":null,"r":null},{"m":"file.io","id":"NEW","g":"a temporary file sharing service","p":null,"r":null},{"m":"authssl.in","id":"NEW","g":"a domain for SSL certificates","p":"E267","r":"b"},{"m":"cloudflare.com","id":"NEW","g":"a cloud infrastructure and security company","p":null,"r":null},{"m":"ns2-dns.com","id":"NEW","g":"a DNS server domain","p":"E173","r":"b"},{"m":"webhop.me","id":"NEW","g":"a domain for webhop.me","p":"E182","r":"b"},{"m":"myftp.org","id":"NEW","g":"a free FTP hosting service","p":"E281","r":"b"},{"m":"viewdns.net","id":"NEW","g":"a domain for DNS lookup tools","p":null,"r":null},{"m":"nod-update.it","id":"NEW","g":"a domain for software updates","p":null,"r":null},{"m":"nas-files.firstcloudit.com","id":"NEW","g":"a subdomain for NAS files on firstcloudit.com","p":null,"r":null},{"m":"grabify.link","id":"NEW","g":"a URL shortening and tracking service","p":null,"r":null},{"m":"serveirc.com","id":"NEW","g":"a domain for IRC servers","p":null,"r":null},{"m":"serveftp.com","id":"NEW","g":"a domain for FTP servers","p":null,"r":null},{"m":"programasparapc.net","id":"NEW","g":"a domain for PC programs","p":null,"r":null},{"m":"nirsoft.me","id":"NEW","g":"the website of NirSoft","p":null,"r":null}]}

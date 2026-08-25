@@ -1,0 +1,288 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 920 canonicals"
+Entities:
+E1. bdf.gov.ua
+E2. trnvk.gov.ua
+E3. cert.gov.ua
+E4. yeah-biches.kyiv.ua
+E5. i-like-hokku.co.ua
+E6. gov-ua.cloud [aka govua.cloud, ua-gov.cloud]
+E7. petition.president.gov.ua
+E8. edisk.in.ua
+E9. geroi.kyiv.ua
+E10. afi-ukraine.org
+E11. hostpro.ua
+E12. gurt.duna.ua
+E13. 01mirror.com.ua
+E14. geroiua.com.ua
+E15. ndibk.gov.ua
+E16. dpsu-gov-ua.com
+E17. sign-cert.com
+E18. check.sign-cert.com
+E19. get.sign-cert.com
+E20. ua-geroi.com.ua
+E21. geroi-ukraine.com
+E22. geroiukrainu.com
+E23. agro-sk.com.ua
+E24. ukraine-geroi.org.ua
+E25. petitian-ukraine.com
+E26. petition-ukraine.com
+E27. petition--ukraine.com
+E28. petitian-president.com
+E29. aten.ua
+E30. barvy-ukraines.life
+E31. malvy-ukraine.info [aka ukraine-malvy.info]
+E32. ukraine-barvy.info
+E33. malvy-ukriane.info
+E34. ukraine-barvy.life
+E35. malvy-ukraine.life
+E36. petition-president.kyiv.ua
+E37. geroiukr.com.ua
+E38. biches-yeah.co.ua
+E39. geroiukr.site
+E40. geroiua.com
+E41. griselda.co.ua
+E42. i-ua.account-guard.site
+E43. griselda-edu.com.ua
+E44. the-new-age.co.ua
+E45. petitian--ukraine.com
+E46. petition-ukrainiane.com
+E47. mirotrent.com [aka plntr.mirotrent.com]
+E48. odwebp.com [aka svc.odwebp.com]
+E49. ukraine-charu.life
+E50. chares-ukraine.life
+E51. ukraine-charyy.life
+E52. barvy-ukraines.info
+E53. tvorchist-sadochka.eu [aka tvorchist-sch-hudojnika.eu]
+E54. balet-ua.eu
+E55. dytitvorchist.pics
+E56. opros-sch-hudojniki.eu [aka tvorchist-sch-hudojniki.eu]
+E57. baletki-ua.eu
+E58. malvy-ukriane.life
+E59. malvy-final.info
+E60. malvy-ukr.life
+E61. petition-president.com.ua
+E62. petition-president.org.ua
+E63. petition-president.com
+E64. petition-presidenta.org.ua
+E65. petition-ukraina.com.ua
+E66. petition-presidenty.org.ua
+E67. petition-presidente.com
+E68. edisk.ukr.net.ssl2.in
+E69. edisk.ukr.net.ssl3.site
+E70. edisk.ukrnet.01mirror.com.ua
+E71. edisk.ukr.net.ssl2.link
+E72. ukraine-malvy.life
+E73. calendar.stib.com.ua
+E74. petition-ukraina.com
+E75. ukraine-chares.info
+E76. petition-presidenty.com
+E77. myftp.biz
+E78. sowakiev.eu
+E79. lotus-kiev.eu [aka lotuskiev.eu]
+E80. hudojnik.eu [aka hudojniku.eu]
+E81. jasminkiev.eu
+E82. baletki.eu
+E83. baletme.eu
+E84. aws-ukraine.cloud
+E85. authssl.org
+E86. bitbucket.org
+E87. awards-ua.pics
+E88. ua-ditinstvo.pics
+E89. hudojnik-diti-ua.eu
+E90. baletki-ua.pics
+E91. deti-golos-ua.pics
+E92. petitionukraine.com
+E93. petition-presidenta.com
+E94. milekiev.eu
+E95. ukr.net.ssl1.site
+E96. passport2.zip
+E97. ukr.net.ssl2.site
+E98. ns1.passport2.zip
+E99. ukr.net.ssl3.site
+E100. ns2.passport2.zip
+E101. griselda.biz.ua
+E102. golos-ua.life [aka golos-ukr.life]
+E103. qsrgh.site [aka www.qsrgh.site]
+E104. authssl.site
+E105. gov-sk.cloud
+E106. eu-central-1.ukrtelecom.cloud
+E107. us-west-1.ukrtelecom.cloud
+E108. ua-energy.cloud
+E109. govps.cloud
+E110. ua-sec.cloud
+E111. s3-ua.cloud
+E112. ukr-golosovan.site [aka ukr-golosovanie.site]
+E113. passport-ukr-net.site
+E114. konkur-golos-ua.eu
+E115. konkur-golos-uah.eu
+E116. vikompalion.ru
+E117. balet-ua.us
+E118. new-tech-savvy.com
+E119. charyy-ukr.life
+E120. ditinstvo-uah.pics
+E121. ukraina-diti-ua.pics
+E122. moe-ditinstvo-uah.pics
+E123. imgurl.ir
+E124. malunki-deti-ua.eu
+E125. malunki-ditini-uah.eu
+E126. golos-ditin-ua.eu
+E127. deti-malunki-ua.eu
+E128. hudojnik-malunki-ua.eu [aka malunki-ua-hudojnik.eu]
+E129. hudojnik-malunki-uah.eu [aka hudojnik-malunki.eu, malunki-hudojnik.eu, malunki-ua.eu, malunki-uah.eu]
+E130. malunki-deti-uah.eu
+E131. golos-malunki-ua.eu
+E132. aws-online.cloud
+E133. us-west-1.aws-ukraine.cloud
+E134. aws-join.cloud
+E135. aws-meet.cloud [aka aws-meetings.cloud]
+E136. aws-il.cloud
+E137. aws-s3.cloud [aka s3-aws.cloud]
+E138. ukrtelecom.cloud
+E139. golos-charu-ua.life
+E140. prozorro.online
+E141. shorturl.at
+E142. ukr-malvy.life
+E143. malvy-vote.life [aka vote-malvy.life]
+E144. crazykids.pics
+E145. baletki-ua.life
+E146. dytiachatvorchist.pics
+E147. balet-me.pro
+E148. grabify.link
+E149. githubusercontent.com
+E150. turnik-malunki-ua.eu
+E151. share-drive.site
+E152. turnik-malunki-uah.eu
+E153. iplogger.com
+E154. balet-ua.life
+E155. deti-ua.eu
+E156. group.kropyva.site
+E157. kropyva.group
+E158. teneta.site
+E159. rmssrv.ru
+E160. filebin.net
+E161. hudojnik-diti.eu
+E162. sc-hudojnik.eu
+E163. hudojnik-dsm.eu
+E164. hudojnik-ua.eu
+E165. funedunet.com
+E166. hudojnik-dst.eu
+Mentions:
+M1. "ndibk.gov.ua" (Domain) — options: E1, E2, E3, E4
+M2. "aten.ua" (Domain) — options: E10, E11, E8, E4
+M3. "bdf.gov.ua" (Domain) — options: E15, E3, E4, E10
+M4. "trnvk.gov.ua" (Domain) — options: E15, E1, E5, E3
+M5. "cert.gov.ua" (Domain) — options: E15, E1, E17, E6
+M6. "ukraine-geroi.org.ua" (Domain) — options: E10, E5, E20, E21
+M7. "geroi-ukraine.com" (Domain) — options: E10, E4, E22, E24
+M8. "petitian--ukraine.com" (Domain) — options: E4, E10, E25, E5
+M9. "barvy-ukraines.info" (Domain) — options: E10, E4, E30, E5
+M10. "geroi.kyiv.ua" (Domain) — options: E4, E5, E20, E36
+M11. "yeah-biches.kyiv.ua" (Domain) — options: E5, E38, E10, E9
+M12. "geroiukr.com.ua" (Domain) — options: E5, E4, E14, E39
+M13. "i-like-hokku.co.ua" (Domain) — options: E4, E41, E42, E23
+M14. "ua-geroi.com.ua" (Domain) — options: E5, E4, E14, E9
+M15. "petitian-ukraine.com" (Domain) — options: E10, E45, E4, E5
+M16. "geroiukrainu.com" (Domain) — options: E4, E5, E21, E37
+M17. "geroiua.com.ua" (Domain) — options: E5, E4, E37, E40
+M18. "ukraine-chares.info" (Domain) — options: E10, E32, E49, E50
+M19. "tvorchist-ua.eu" (Domain) — options: E4, E5, E53, E10
+M20. "malvy-ukriane.info" (Domain) — options: E10, E4, E31, E58
+M21. "petition.president.gov.ua" (Domain) — options: E36, E61, E62, E63
+M22. "edisk.in.ua" (Domain) — options: E4, E15, E68, E10
+M23. "malvy-ukraine.info" (Domain) — options: E10, E4, E33, E59
+M24. "biches-yeah.co.ua" (Domain) — options: E4, E5, E41, E10
+M25. "petitionukraine.com" (Domain) — options: E7, E10, E26, E47
+M26. "ukraine-barvy.info" (Domain) — options: E10, E4, E31, E34
+M27. "petition-presidenty.org.ua" (Domain) — options: E7, E36, E62, E76
+M28. "griselda.biz.ua" (Domain) — options: E4, E5, E41, E10
+M29. "milekiev.eu" (Domain) — options: E4, E10, E78, E79
+M30. "afi-ukraine.org" (Domain) — options: E4, E84, E21, E24
+M31. "ukraina-diti-ua.pics" (Domain) — options: E4, E10, E87, E88
+M32. "petition--ukraine.com" (Domain) — options: E7, E65, E26, E74
+M33. "lotus-kiev.eu" (Domain) — options: E4, E5, E78, E94
+M34. "passport-ukr-net.site" (Domain) — options: E15, E95, E96, E2
+M35. "petition-ukraine.com" (Domain) — options: E7, E27, E65, E74
+M36. "griselda.co.ua" (Domain) — options: E5, E4, E101, E10
+M37. "barvy-ukraines.life" (Domain) — options: E10, E4, E52, E5
+M38. "geroiukr.site" (Domain) — options: E5, E4, E37, E102
+M39. "petition-president.org.ua" (Domain) — options: E7, E36, E64, E66
+M40. "agro-sk.com.ua" (Domain) — options: E5, E37, E105, E4
+M41. "ukrtelecom.cloud" (Domain) — options: E106, E107, E84, E108
+M42. "petition-ukraina.com" (Domain) — options: E7, E65, E26, E27
+M43. "ukr-golosovane.site" (Domain) — options: E5, E112, E113, E114
+M44. "gurt.duna.ua" (Domain) — options: E4, E3, E29, E5
+M45. "the-new-age.co.ua" (Domain) — options: E4, E41, E5, E38
+M46. "petition-president.kyiv.ua" (Domain) — options: E7, E61, E4, E62
+M47. "ukraine-charyy.life" (Domain) — options: E10, E49, E119, E4
+M48. "petition-presidenta.org.ua" (Domain) — options: E7, E62, E93, E36
+M49. "ditinstvo-ua.pics" (Domain) — options: E10, E4, E88, E120
+M50. "petition-ukrainiane.com" (Domain) — options: E7, E74, E26, E27
+M51. "petition-ukraina.com.ua" (Domain) — options: E7, E74, E26, E121
+M52. "malunki-ditin-ua.eu" (Domain) — options: E124, E125, E126, E127
+M53. "aws-ukraine.cloud" (Domain) — options: E10, E132, E133, E134
+M54. "ukraine-barvy.life" (Domain) — options: E10, E4, E72, E32
+M55. "ukraine-charu.life" (Domain) — options: E10, E51, E139, E4
+M56. "hostpro.ua" (Domain) — options: E5, E29, E41, E4
+M57. "ukraine-malvy.life" (Domain) — options: E10, E35, E142, E34
+M58. "baletkiev.pics" (Domain) — options: E4, E90, E144, E10
+M59. "malvy-ukraine.life" (Domain) — options: E10, E72, E60, E58
+M60. "shorturl.at" (Domain) — options: E148, E11, E123, E149
+M61. "portret-ua.eu" (Domain) — options: E10, E54, E5, E57
+M62. "kropyva.site" (Domain) — options: E116, E156, E149, E157
+M63. "chares-ukraine.life" (Domain) — options: E10, E30, E35, E75
+M64. "hudojnik.eu" (Domain) — options: E5, E160, E161, E162
+M65. "griselda-edu.com.ua" (Domain) — options: E5, E4, E41, E101
+
+=== RESPONSE (52.3s, in 5868 / out 11800 tok, stop) ===
+{"v":[{"m":"ndibk.gov.ua","id":"NEW","g":"government domain","p":null,"r":null},{"m":"aten.ua","id":"NEW","g":"domain of aten","p":null,"r":null},{"m":"bdf.gov.ua","id":"NEW","g":"government domain","p":null,"r":null},{"m":"trnvk.gov.ua","id":"NEW","g":"government domain","p":null,"r":null},{"m":"cert.gov.ua","id":"NEW","g":"government domain","p":null,"r":null},{"m":"ukraine-geroi.org.ua","id":"NEW","g":"domain for heroes of Ukraine","p":null,"r":null},{"m":"geroi-ukraine.com","id":"NEW","g":"domain for heroes of Ukraine","p":null,"r":null},{"m":"petitian--ukraine.com","id":"NEW","g":"petition domain for Ukraine","p":null,"r":null},{"m":"barvy-ukraines.info","id":"NEW","g":"domain for colors of Ukraine","p":null,"r":null},{"m":"geroi.kyiv.ua","id":"NEW","g":"domain for heroes in Kyiv","p":null,"r":null},{"m":"yeah-biches.kyiv.ua","id":"NEW","g":"domain in Kyiv","p":null,"r":null},{"m":"geroiukr.com.ua","id":"NEW","g":"domain for heroes of Ukraine","p":null,"r":null},{"m":"i-like-hokku.co.ua","id":"NEW","g":"domain for hokku","p":null,"r":null},{"m":"ua-geroi.com.ua","id":"NEW","g":"domain for heroes of Ukraine","p":null,"r":null},{"m":"petitian-ukraine.com","id":"NEW","g":"petition domain for Ukraine","p":null,"r":null},{"m":"geroiukrainu.com","id":"NEW","g":"domain for heroes of Ukraine","p":null,"r":null},{"m":"geroiua.com.ua","id":"NEW","g":"domain for heroes of Ukraine","p":null,"r":null},{"m":"ukraine-chares.info","id":"NEW","g":"domain for Ukraine","p":null,"r":null},{"m":"tvorchist-ua.eu","id":"NEW","g":"creative domain","p":null,"r":null},{"m":"malvy-ukriane.info","id":"NEW","g":"domain for mallow of Ukraine","p":null,"r":null},{"m":"petition.president.gov.ua","id":"NEW","g":"presidential petition domain","p":null,"r":null},{"m":"edisk.in.ua","id":"NEW","g":"online disk domain","p":null,"r":null},{"m":"malvy-ukraine.info","id":"NEW","g":"domain for mallow of Ukraine","p":null,"r":null},{"m":"biches-yeah.co.ua","id":"NEW","g":"domain in Ukraine","p":null,"r":null},{"m":"petitionukraine.com","id":"NEW","g":"petition domain for Ukraine","p":null,"r":null},{"m":"ukraine-barvy.info","id":"NEW","g":"domain for colors of Ukraine","p":null,"r":null},{"m":"petition-presidenty.org.ua","id":"NEW","g":"presidential petition domain","p":null,"r":null},{"m":"griselda.biz.ua","id":"NEW","g":"domain for Griselda","p":null,"r":null},{"m":"milekiev.eu","id":"NEW","g":"domain in Kyiv","p":null,"r":null},{"m":"afi-ukraine.org","id":"NEW","g":"Ukraine organization domain","p":null,"r":null},{"m":"ukraina-diti-ua.pics","id":"NEW","g":"domain for children's pictures","p":null,"r":null},{"m":"petition--ukraine.com","id":"NEW","g":"petition domain for Ukraine","p":null,"r":null},{"m":"lotus-kiev.eu","id":"NEW","g":"domain in Kyiv","p":null,"r":null},{"m":"passport-ukr-net.site","id":"NEW","g":"passport related domain","p":null,"r":null},{"m":"petition-ukraine.com","id":"NEW","g":"petition domain for Ukraine","p":null,"r":null},{"m":"griselda.co.ua","id":"NEW","g":"domain for Griselda","p":null,"r":null},{"m":"barvy-ukraines.life","id":"NEW","g":"domain for colors of Ukraine","p":null,"r":null},{"m":"geroiukr.site","id":"NEW","g":"domain for heroes of Ukraine","p":null,"r":null},{"m":"petition-president.org.ua","id":"NEW","g":"presidential petition domain","p":null,"r":null},{"m":"agro-sk.com.ua","id":"NEW","g":"agricultural domain","p":null,"r":null},{"m":"ukrtelecom.cloud","id":"NEW","g":"telecom cloud domain","p":null,"r":null},{"m":"petition-ukraina.com","id":"NEW","g":"petition domain for Ukraine","p":null,"r":null},{"m":"ukr-golosovane.site","id":"NEW","g":"voting domain","p":"E112","r":"v"},{"m":"gurt.duna.ua","id":"NEW","g":"domain in Ukraine","p":null,"r":null},{"m":"the-new-age.co.ua","id":"NEW","g":"domain in Ukraine","p":null,"r":null},{"m":"petition-president.kyiv.ua","id":"NEW","g":"presidential petition domain","p":null,"r":null},{"m":"ukraine-charyy.life","id":"NEW","g":"domain for Ukraine","p":null,"r":null},{"m":"petition-presidenta.org.ua","id":"NEW","g":"presidential petition domain","p":null,"r":null},{"m":"ditinstvo-ua.pics","id":"NEW","g":"domain for children's pictures","p":"E88","r":"v"},{"m":"petition-ukrainiane.com","id":"NEW","g":"petition domain for Ukraine","p":null,"r":null},{"m":"petition-ukraina.com.ua","id":"NEW","g":"petition domain for Ukraine","p":null,"r":null},{"m":"malunki-ditin-ua.eu","id":"E126","g":null,"p":null,"r":null},{"m":"aws-ukraine.cloud","id":"NEW","g":"cloud domain","p":null,"r":null},{"m":"ukraine-barvy.life","id":"NEW","g":"domain for colors of Ukraine","p":null,"r":null},{"m":"ukraine-charu.life","id":"NEW","g":"domain for Ukraine","p":null,"r":null},{"m":"hostpro.ua","id":"NEW","g":"hosting domain","p":null,"r":null},{"m":"ukraine-malvy.life","id":"NEW","g":"domain for mallow of Ukraine","p":null,"r":null},{"m":"baletkiev.pics","id":"NEW","g":"ballet picture domain","p":"E90","r":"v"},{"m":"malvy-ukraine.life","id":"NEW","g":"domain for mallow of Ukraine","p":null,"r":null},{"m":"shorturl.at","id":"NEW","g":"URL shortening service","p":null,"r":null},{"m":"portret-ua.eu","id":"NEW","g":"portrait domain","p":null,"r":null},{"m":"kropyva.site","id":"NEW","g":"domain for kropyva","p":"E156","r":"b"},{"m":"chares-ukraine.life","id":"NEW","g":"domain for Ukraine","p":null,"r":null},{"m":"hudojnik.eu","id":"NEW","g":"artist domain","p":null,"r":null},{"m":"griselda-edu.com.ua","id":"NEW","g":"educational domain for Griselda","p":null,"r":null}]}"

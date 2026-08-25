@@ -1,0 +1,587 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 627 canonicals"
+Entities:
+E1. loader.exe
+E2. jDownloader
+E3. Propagate
+E4. GoDownloader
+E5. GzipLoader
+E6. portable.exe
+E7. SPECTR.PluginLoader
+E8. Snake Keylogger
+E9. RelicRace
+E10. WINWORD.EXE
+E11. write.exe
+E12. MS Office [aka Microsoft Office]
+E13. 223329.exe
+E14. rutserv.exe
+E15. Microsoft Office Services and Web Apps
+E16. 62ea.exe
+E17. rfusclient.exe
+E18. Microsoft Office 2016 [aka Office 2016]
+E19. 1.Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.exe
+E20. Видаткова_накладная_№121_вiд_18_липня_2023p.pdf.js
+E21. До оплати від 11.12.18.lzh
+E22. Акт_звiрки_вiд_18_липня_2023p.pdf.js
+E23. Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.zip
+E24. Pax_ipn_18.07.2023p.jpg
+E25. inf.zip [aka info.zip]
+E26. довідка.zip
+E27. 501_25_103.zip
+E28. Видаткова_накладная_№121_вiд_18_липня_2023p.zip
+E29. 2.Витяг з реeстру вiд 24.07.2023р_Код документа 9312-0580-6944-3255.xls.js
+E30. Рахунки за выполненные работы от 11.12.2018.js
+E31. anketa_21_3_2018 (4).js
+E32. Гуманітарна катастрофа України з 24 лютого 2022 року.xls
+E33. pax_2023_ab1058..js
+E34. Python 2.7.18
+E35. ./рахунки ООО Спецстрой.xls.js
+E36. CVE-2020-3255
+E37. рахунки компания технік.zip
+E38. Архів листування російської терористки М.Колєди.exe
+E39. GandCrab v4.1
+E40. RoarBat
+E41. Protector.bat
+E42. news.bat
+E43. killself.bat
+E44. officecleaner.bat
+E45. AZORult
+E46. PO.jpg (EXE)
+E47. Base-Update.exe [aka base_update.exe]
+E48. ssj.jpg
+E49. sserv.jpg
+E50. spisok_24.08.2018.com
+E51. Moonraker Petya
+E52. 966449.exe
+E53. curl.exe [aka curl]
+E54. explorer.exe
+E55. MSCommondll.exe
+E56. b.exe
+E57. Windows_Security_Update_gMj
+E58. AdvancedRun.exe
+E59. csrss.exe
+E60. spi.exe
+E61. one.exe
+E62. cscript.exe
+E63. sysm.exe
+E64. crsse.exe
+E65. dropper.exe
+E66. Meterpreter
+E67. EdgeNotification.dll
+E68. httpshelper.dll
+E69. RegAsm.exe
+E70. MicroBackdoor [aka microbackdoor.dll]
+E71. Kometa Browser
+E72. WibuCm32.dll
+E73. core.dll
+E74. MSDriverMonitor.exe
+E75. CVE-2017-8759
+E76. CVE-2017-0144
+E77. CVE-2021-44026
+E78. CVE-2021-26855
+E79. CVE-2018-8170
+E80. CVE-2020-7047
+E81. CVE-2021-44228
+E82. CVE-2021-26857
+E83. CVE-2018-8134
+E84. cmd.exe
+E85. Iclouding.exe
+E86. installer.exe
+E87. PowerShell [aka powershell.exe, PowerShell (powershell.exe)]
+E88. microsoft-cortana.exe
+E89. CVE-2020-3110
+E90. CVE-2022-21907
+E91. CVE-2018-8132
+E92. CVE-2020-3119
+E93. CVE-2022-23134
+E94. CVE-2022-23131
+E95. CVE-2018-8129
+E96. CVE-2020-3120
+E97. JesterStealer
+E98. StealDeal
+E99. Racoon
+E100. GammaSteel.NET
+E101. SmartFTP
+E102. DarkCrystal RAT
+E103. TeamViewer
+E104. Ursnif
+E105. IceDragon
+E106. Themida
+E107. Icloud.exe
+E108. BankBot
+E109. icloud.cmd
+E110. Agent Tesla [aka AgentTesla]
+E111. ESET Online Scanner.exe
+E112. UkrScanner.rar
+E113. UkrScanner.exe (SFX)
+E114. eset.yar
+E115. Assistance.rar
+E116. Microsoft Safety Scanner
+E117. zakon.rar
+E118. Диверсанти.rar
+E119. Troldesh/Shade [aka Troldesh, Shade, XTBL, Trojan.Encoder.858]
+E120. CVE-2021-34523
+E121. CVE-2020-3187
+E122. CVE-2021-31207
+E123. CVE-2018-8141
+E124. CVE-2020-3283
+E125. CVE-2018-8124
+E126. CVE-2018-0854
+E127. CVE-2021-34473
+E128. CVE-2021-27065
+E129. CVE-2018-8127
+E130. CVE-2021-32648
+E131. CVE-2020-3125
+E132. Encrpt3d Ransomware
+E133. Cuba Ransomware
+E134. Misha
+E135. BitsTransfer
+E136. WhisperPack
+E137. GandCrab v4
+E138. ChakraCore
+E139. CVE-2020-3259
+E140. CVE-2021-40444
+E141. CVE-2020-3196
+E142. CVE-2020-3759 [aka CVE-2020-3179]
+E143. CVE-2020-3741
+E144. CVE-2020-0601
+E145. CVE-2020-3254
+E146. Remcos
+E147. MarsStealer
+E148. DAAL
+E149. njRAT
+E150. needrestart
+E151. DirectAdmin
+E152. WhiteBlackCrypt Ransomware
+E153. MSCommonDriver.DCRat.exe
+E154. VMProtect
+E155. ZeroWipe
+E156. QuickMute
+E157. passport.bat
+E158. CVE-2020-3757
+E159. CVE-2020-0609
+E160. Smokeloader
+E161. ProxyLogon
+E162. Brave Browser
+E163. Snort
+E164. Internet Explorer
+E165. Test-ProxyLogon.ps1
+E166. CVE-2020-3298
+E167. major.exe
+E168. hostname
+E169. Remote Utilities - Host
+E170. Windows_Security_Update_HxW
+E171. Windows Script Host
+E172. Windows_Security_Update_xBQ
+E173. vbc.exe
+E174. alt.exe
+E175. TRYxaEbX [aka TRYxaEbX.ps1]
+E176. AnyDesk
+E177. DWAgent
+E178. OUTSTEEL
+E179. Qualys SSL Client Test
+E180. OpenSSL
+E181. PinkyAgent
+E182. CVE-2018-0958
+E183. CVE-2017-11882
+E184. CVE-2018-20251 [aka CVE-2018-20252]
+E185. CVE-2018-7602
+E186. CVE-2018-20250
+E187. CVE-2020-12641
+E188. CVE-2020-35730
+E189. AutoIt
+E190. takeown
+E191. icacls.exe
+E192. TAILJUMP
+E193. systeminfo
+E194. Hashcat
+E195. Windows Vista
+E196. CVE-2020-3191
+E197. CVE-2020-3195
+E198. CVE-2020-3111
+E199. file.htm
+E200. HATVIBE
+E201. We4Qu6.hta
+E202. mshta.exe
+E203. Filezilla
+E204. Диверсанти file‮‮rar.scr
+E205. EFAIL
+E206. Диверсанти filercs.rar
+E207. MS Word [aka Microsoft Word, Microsoft Office Word]
+E208. Adobe Framemaker
+E209. Adobe Digital Editions
+E210. Adobe Flash Player
+E211. Outlook [aka Microsoft Outlook]
+E212. Adobe Experience Manager
+E213. Adobe Illustrator CC
+E214. VMware Workstation Player
+E215. CVE-2020-3189
+E216. CVE-2020-7048
+E217. CVE-2020-3760
+E218. CVE-2020-3118
+E219. HTA file
+E220. HTM dropper
+E221. ./перевірити діяльність.html
+E222. formbook.exe [aka Formbook]
+E223. Firefox [aka Mozilla Firefox]
+E224. ./decpded_page.html
+E225. CVE-2017-17689
+E226. wscript.exe [aka Windows Script Host (wscript.exe)]
+E227. Windows Server 2008
+E228. VBScript
+E229. Windows Host Compute Service Shim
+E230. Windows Server 2012
+E231. Windows [aka Microsoft Windows]
+E232. CVE-2020-0611
+E233. Chipset Device Software
+E234. VMware ESXi
+E235. .NET Framework
+E236. VMware Tools
+E237. dnscat
+E238. Mirai
+E239. Ngrok
+E240. Рахунки и новые списки.lzh
+E241. До оплати рах.ф. 74 - 2018р.js
+E242. рахунки компания технік.lzh
+E243. 07.11.18р список.docx
+E244. За текущий месяц рах.ф. Спецбуд.lzh
+E245. Компания.png
+E246. csrss.zip
+E247. Aid request COVID-19-04_5_22.xls
+E248. 501_25_103.lnk
+E249. IcloudSecurity.lnk
+E250. Windows Prefetch.lNk
+E251. Про збереження відеоматеріалів з фіксацією злочинних дій армії російської федерації.exe
+E252. c.js
+E253. e.js
+E254. зг. дог рах. фак 708.js
+E255. CVE-2018-8174
+E256. Алгоритм дій членів сім’ї безвісти відсутнього військовослужбовця LegalAid.rar
+E257. Информация.js
+E258. GOST (Go Simple Tunnel)
+E259. ignit.vbs
+E260. Gazprombank.zakaz.docx.zip
+E261. Вирус... крайне опасно!!!.zip
+E262. Necessary_military_assistance.rar
+E263. Cisco Adaptive Security Appliance (ASA) Software
+E264. УКАЗ ПРЕЗИДЕНТА УКРАЇНИ №151_2022.mp4.lnk
+E265. IIS [aka IIS (Internet Information Services)]
+E266. Indy Library
+E267. dhdhk0k34.com
+E268. RemCom
+E269. Corona-virus-Map.com.exe
+E270. shahed.ppsx
+E271. WinRAR
+E272. НПУ.docx
+E273. dovidka.chm
+E274. BidSwipe
+E275. Заявка.js
+E276. SSL 3.0
+E277. Диверсанти 21.03.rar
+E278. Elements Browser
+E279. Formbook/XLoader v2.5
+E280. WinRAR 5.70 Beta 1
+E281. junit.js
+E282. GreyEnergy mini
+E283. Інформація щодо наявності вакансій та їх укомплектування.xls
+E284. Nuclear Terrorism A Very Real Threat.rtf
+E285. SMB протокол
+E286. List of necessary things for the provision of military humanitarian assistance to Ukraine.lnk [aka Providing military humanitarian assistance to Ukraine.lnk]
+E287. q.js
+E288. Vidar
+E289. BootPatch
+E290. DOWNEX
+E291. OVERJAM
+E292. TRYxaEbX_2.ps1
+E293. Proxmox
+E294. Trillian
+E295. oYUuQbXu
+E296. GreyEnergy
+E297. Sonoko [aka Trojan:Win32/Sonoko.A!ms]
+E298. WinSCP
+E299. Win32k
+E300. WinExe
+E301. CyBOX
+E302. Linux
+E303. CVE-2017-14491
+E304. CVE-2017-17688
+E305. CVE-2017-0199
+E306. CVE-2019-17666
+E307. CredPump
+E308. LONEPAGE
+E309. stage2.ps1
+E310. GammaSteel.PS1
+E311. GammaLoad [aka GammaLoad.PS1]
+E312. z.ps1
+E313. SearchEmbdIndex.ps1
+E314. GammaLoad.PS1_v2
+E315. Лица, которые переместились из АР Крым и районов проведения антитерротистической операции.com
+E316. Електронний запит.exe
+E317. Газпромбанк заказ.js
+E318. documents (5).js
+E319. Meris
+E320. CVE-2018-7600
+E321. Drupalgeddon2
+E322. CVE-2018-6882
+E323. BrownFlood
+E324. CVE-2022-24521
+E325. CVE-2022-30190
+E326. DropMeFiles
+E327. Chrome [aka Google Chrome]
+E328. rtlwifi driver
+E329. Rclone
+E330. Double Kill
+E331. MSDriverLoader.exe
+E332. Coowon Browser
+E333. Telegram
+E334. HoaxApe
+E335. whois
+E336. Zoom
+E337. Apple Mail
+E338. watchOS
+E339. stage1.ps1
+E340. shahed-136.rar
+E341. ESET_scanner.rar
+E342. Windows 7
+E343. Windows 10
+E344. Windows SMBv1
+E345. Windows 2008 R2
+E346. Windows 10 version 1809
+E347. Microsoft Windows XP
+E348. iOS Mail
+E349. Cisco IOS
+E350. iPadOS
+E351. Cisco IOS XE
+E352. macOS
+E353. Cisco IOS XR
+E354. Firefox для iOS
+E355. Vivaldi Browser
+E356. host_news_mod_mod.msi
+E357. CoronaMap.exe
+E358. Netscan
+E359. iclouds.cmd
+E360. IcedID
+E361. dnscmd
+E362. LOADJUMP
+E363. RC2CL
+E364. RoyalRoad
+E365. Pterodo
+E366. YARA
+E367. ARGUEPATCH
+E368. Apache
+E369. HVNC bot
+E370. SaintBot
+E371. Joomla
+E372. SPECTR.Archiver
+E373. CLOGFLAG
+E374. Eazfuscator
+E375. SPECTR.Installer
+E376. APERETIF
+E377. smbexec
+E378. Renci.SshNet
+E379. SOLOSHRED
+E380. Sysmon
+E381. FREAK (CVE-2015-0204)
+E382. Zenmap
+E383. dnsmasq
+E384. CredoMap
+E385. http-vuln-cve2021-26855.nse
+E386. POWERGAP
+E387. nginx
+E388. CredoMap_v2
+E389. Bisonal
+E390. TunnelMole
+E391. wmiexec
+E392. SourSnack
+E393. tasklist
+E394. SPECTR.Info
+E395. ipad.system
+E396. Microsoft Windows 7 for 32-bit Systems SP1
+E397. SQLite.Interop.dll
+E398. CHERRYSPY
+E399. shellcode.x64 (Cobalt Strike Beacon) [aka shellcode.x64.bin]
+E400. shellcode.x86 (Cobalt Strike Beacon) [aka shellcode.x86.bin]
+E401. PhotoMetadataHandler.dll
+E402. Desired State Configuration (DSC)
+E403. October CMS [aka OctoberCMS]
+E404. LOGPIE
+E405. LoadEdge
+E406. SNMP Subagent Stand-Alone for Windows
+E407. LiteManager
+E408. nslookup
+E409. WhatsApp
+Mentions:
+M1. "Smokeloader" (Software) — options: E1, E2, E3, E4
+M2. "weboffice.exe" (Software) — options: E10, E11, E12, E13
+M3. "Видаткова_накладная_№121_вiд_18_липня_2023p.zip" (Software) — options: E19, E20, E21, E22
+M4. "Видаткова_накладная_№121_вiд_18_липня_2023p.pdf.js" (Software) — options: E28, E29, E22, E30
+M5. "Акт_звiрки_вiд_18_липня_2023p.pdf.js" (Software) — options: E29, E20, E28, E30
+M6. "Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.zip" (Software) — options: E19, E29, E21, E30
+M7. "1.Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.exe" (Software) — options: E23, E29, E21, E38
+M8. "passport.bat" (Software) — options: E40, E41, E42, E43
+M9. "2.Витяг з реeстру вiд 24.07.2023р_Код документа 9312-0580-6944-3255.xls.js" (Software) — options: E19, E23, E35, E22
+M10. "Pax_ipn_18.07.2023p.jpg" (Software) — options: E33, E22, E48, E28
+M11. "sgegkseg23mjl.exe" (Software) — options: E52, E13, E53, E54
+M12. "Skype.exe" (Software) — options: E59, E60, E61, E13
+M13. "CodeMeter.exe" (Software) — options: E59, E65, E66, E13
+M14. "PhotoMetadataHandler.dll" (Software) — options: E55, E67, E68, E69
+M15. "CVE-2021-40444" (Software) — options: E75, E76, E77, E78
+M16. "MCMDiction.exe" (Software) — options: E55, E13, E84, E85
+M17. "portable.exe" (Software) — options: E52, E86, E61, E13
+M18. "CVE-2022-30190" (Software) — options: E75, E89, E90, E91
+M19. "MarsStealer" (Software) — options: E97, E98, E59, E99
+M20. "IcedID" (Software) — options: E104, E105, E5, E106
+M21. "ESET_scanner.rar" (Software) — options: E111, E112, E113, E114
+M22. "CVE-2021-34473" (Software) — options: E83, E120, E78, E79
+M23. "CVE-2022-24521" (Software) — options: E125, E126, E120, E93
+M24. "CVE-2021-34523" (Software) — options: E83, E127, E78, E123
+M25. "CVE-2021-31207" (Software) — options: E128, E96, E78, E129
+M26. "WhiteBlackCrypt Ransomware" (Software) — options: E132, E133, E119, E134
+M27. "CVE-2021-44026" (Software) — options: E124, E131, E81, E78
+M28. "CVE-2020-3757" (Software) — options: E124, E139, E142, E131
+M29. "DarkCrystal RAT" (Software) — options: E146, E147, E148, E149
+M30. "Protector.bat" (Software) — options: E40, E43, E154, E119
+M31. "CVE-2020-3759" (Software) — options: E139, E124, E158, E144
+M32. "Snake Keylogger" (Software) — options: E110, E160, E161, E97
+M33. "CVE-2020-3254" (Software) — options: E139, E36, E142, E124
+M34. "host_news_mod_mod.msi" (Software) — options: E167, E42, E168, E57
+M35. "b.exe" (Software) — options: E52, E173, E61, E13
+M36. "Agent Tesla" (Software) — options: E8, E176, E177, E146
+M37. "CVE-2020-3259" (Software) — options: E36, E145, E142, E124
+M38. "CVE-2020-3255" (Software) — options: E139, E145, E142, E124
+M39. "CVE-2018-6882" (Software) — options: E126, E182, E183, E184
+M40. "CVE-2021-32648" (Software) — options: E124, E187, E122, E78
+M41. "CVE-2020-3760" (Software) — options: E124, E131, E188, E142
+M42. "tasklist" (Software) — options: E59, E189, E190, E191
+M43. "CVE-2020-3196" (Software) — options: E121, E196, E142, E139
+M44. "CVE-2020-3741" (Software) — options: E124, E131, E198, E142
+M45. "HTA file" (Software) — options: E199, E200, E201, E202
+M46. "Adobe Acrobat Reader" (Software) — options: E207, E208, E209, E210
+M47. "CVE-2020-3195" (Software) — options: E141, E121, E131, E196
+M48. "CVE-2020-7047" (Software) — options: E124, E131, E216, E142
+M49. "CVE-2020-35730" (Software) — options: E131, E124, E217, E142
+M50. "CVE-2020-3111" (Software) — options: E131, E124, E89, E142
+M51. "CVE-2020-7048" (Software) — options: E124, E131, E80, E142
+M52. "file.htm" (Software) — options: E219, E220, E221, E203
+M53. "CVE-2018-13379" (Software) — options: E215, E225, E184, E121
+M54. "Windows Script Host" (Software) — options: E226, E62, E227, E228
+M55. "CVE-2020-12641" (Software) — options: E131, E124, E144, E143
+M56. "CVE-2020-3110" (Software) — options: E131, E124, E198, E218
+M57. "Encrpt3d Ransomware" (Software) — options: E152, E133, E119, E137
+M58. "njRAT" (Software) — options: E146, E237, E102, E40
+M59. "CVE-2020-3125" (Software) — options: E124, E96, E142, E139
+M60. "Cuba Ransomware" (Software) — options: E119, E132, E152, E138
+M61. "Рахунки за выполненные работы от 11.12.2018.js" (Software) — options: E35, E240, E21, E37
+M62. "рахунки компания технік.zip" (Software) — options: E242, E240, E245, E35
+M63. "УКАЗ ПРЕЗИДЕНТА УКРАЇНИ №151_2022.mp4.lnk" (Software) — options: E19, E32, E21, E247
+M64. "./рахунки ООО Спецстрой.xls.js" (Software) — options: E30, E240, E244, E242
+M65. "До оплати рах.ф. 74 - 2018р.js" (Software) — options: E30, E21, E254, E244
+M66. "Інформація щодо наявності вакансій та їх укомплектування.xls" (Software) — options: E32, E256, E257, E35
+M67. "inf.zip" (Software) — options: E246, E27, E26, E259
+M68. "List of necessary things for the provision of military humanitarian assistance to Ukraine.lnk" (Software) — options: E262, E32, E263, E115
+M69. "spisok_24.08.2018.com" (Software) — options: E243, E24, E60, E267
+M70. "shahed-136.rar" (Software) — options: E270, E262, E115, E117
+M71. "довідка.zip" (Software) — options: E25, E246, E273, E27
+M72. "anketa_21_3_2018 (4).js" (Software) — options: E275, E33, E252, E276
+M73. "documents (5).js" (Software) — options: E254, E252, E278, E279
+M74. "./перевірити діяльність.html" (Software) — options: E26, E224, E273, E277
+M75. "Гуманітарна катастрофа України з 24 лютого 2022 року.xls" (Software) — options: E283, E264, E29, E241
+M76. "Лица, которые переместились из АР Крым и районов проведения антитерротистической операции.com" (Software) — options: E256, E38, E285, E267
+M77. "Информация.js" (Software) — options: E275, E252, E283, E254
+M78. "dovidka.chm" (Software) — options: E26, E267, E288, E19
+M79. "TRYxaEbX" (Software) — options: E292, E52, E293, E294
+M80. "WinRAR" (Software) — options: E280, E238, E112, E288
+M81. "oYUuQbXu" (Software) — options: E52, E301, E224, E175
+M82. "CVE-2017-17689" (Software) — options: E126, E303, E304, E76
+M83. "CVE-2017-17688" (Software) — options: E126, E182, E225, E76
+M84. "./decpded_page.html" (Software) — options: E175, E221, E199, E47
+M85. "stage1.ps1" (Software) — options: E309, E310, E311, E270
+M86. "Про збереження відеоматеріалів з фіксацією злочинних дій армії російської федерації.exe" (Software) — options: E38, E32, E283, E315
+M87. "pax_2023_ab1058..js" (Software) — options: E22, E31, E254, E24
+M88. "Заявка.js" (Software) — options: E257, E252, E254, E253
+M89. "e.js" (Software) — options: E252, E254, E287, E281
+M90. "c.js" (Software) — options: E257, E253, E318, E287
+M91. "Газпромбанк заказ.js" (Software) — options: E275, E252, E260, E253
+M92. "CVE-2018-7602" (Software) — options: E320, E184, E321, E322
+M93. "junit.js" (Software) — options: E287, E259, E252, E318
+M94. "CVE-2022-23134" (Software) — options: E94, E90, E139, E83
+M95. "CVE-2022-23131" (Software) — options: E93, E90, E139, E198
+M96. "Архів листування російської терористки М.Колєди.exe" (Software) — options: E251, E315, E19, E316
+M97. "Google Drive" (Software) — options: E326, E327, E328, E329
+M98. "WhatsApp" (Software) — options: E333, E200, E211, E334
+M99. "stage2.ps1" (Software) — options: E339, E310, E311, E270
+M100. "zakon.rar" (Software) — options: E112, E115, E271, E118
+M101. "Windows" (Software) — options: E342, E343, E172, E57
+M102. "iOS" (Software) — options: E348, E265, E349, E338
+M103. "Диверсанти file‮‮rar.scr" (Software) — options: E118, E206, E277, E112
+M104. "Електронний запит.exe" (Software) — options: E356, E13, E111, E56
+M105. "news.bat" (Software) — options: E157, E358, E41, E40
+M106. "icloud.cmd" (Software) — options: E359, E107, E249, E84
+M107. "iclouds.cmd" (Software) — options: E109, E84, E249, E107
+M108. "RoarBat" (Software) — options: E157, E364, E365, E41
+M109. "BootPatch" (Software) — options: E3, E367, E273, E338
+M110. "ARGUEPATCH" (Software) — options: E289, E372, E368, E338
+M111. "NTDSDumpEx" (Software) — options: E194, E274, E290, E191
+M112. "SSH" (Software) — options: E307, E134, E48, E378
+M113. "nmap" (Software) — options: E382, E358, E383, E384
+M114. "hostname" (Software) — options: E387, E334, E171, E383
+M115. "dnscat" (Software) — options: E390, E361, E194, E383
+M116. "systeminfo" (Software) — options: E393, E394, E25, E380
+M117. "sserv.jpg" (Software) — options: E48, E14, E46, E317
+M118. "Cobalt Strike Beacon" (Software) — options: E399, E400, E401, E135
+M119. "LONEPAGE" (Software) — options: E403, E404, E329, E61
+M120. "whois" (Software) — options: E168, E231, E319, E408
+M121. "q.js" (Software) — options: E281, E252, E318, E253
+
+=== RESPONSE (142.0s, in 11496 / out 17811 tok, stop) ===
+{"v":[{"m":"Smokeloader","id":"NEW","g":"malware family","p":null,"r":null},{"m":"weboffice.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Видаткова_накладная_№121_вiд_18_липня_2023p.zip","id":"NEW","g":"zip archive","p":null,"r":null},{"m":"Видаткова_накладная_№121_вiд_18_липня_2023p.pdf.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"Акт_звiрки_вiд_18_липня_2023p.pdf.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.zip","id":"NEW","g":"zip archive","p":null,"r":null},{"m":"1.Платiжна iнструкцiя iпн та вытяг з реестру Код документа 9312-0580-6944-3255.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"passport.bat","id":"NEW","g":"batch file","p":null,"r":null},{"m":"2.Витяг з реeстру вiд 24.07.2023р_Код документа 9312-0580-6944-3255.xls.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"Pax_ipn_18.07.2023p.jpg","id":"NEW","g":"image file","p":null,"r":null},{"m":"sgegkseg23mjl.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Skype.exe","id":"NEW","g":"Skype executable","p":null,"r":null},{"m":"CodeMeter.exe","id":"NEW","g":"CodeMeter executable","p":null,"r":null},{"m":"PhotoMetadataHandler.dll","id":"NEW","g":"dynamic link library","p":null,"r":null},{"m":"CVE-2021-40444","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"MCMDiction.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"portable.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"CVE-2022-30190","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"MarsStealer","id":"NEW","g":"stealer malware","p":null,"r":null},{"m":"IcedID","id":"NEW","g":"malware family","p":null,"r":null},{"m":"ESET_scanner.rar","id":"NEW","g":"rar archive","p":"E111","r":"v"},{"m":"CVE-2021-34473","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2022-24521","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2021-34523","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2021-31207","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"WhiteBlackCrypt Ransomware","id":"NEW","g":"ransomware family","p":null,"r":null},{"m":"CVE-2021-44026","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-3757","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"DarkCrystal RAT","id":"NEW","g":"remote access trojan","p":null,"r":null},{"m":"Protector.bat","id":"NEW","g":"batch file","p":null,"r":null},{"m":"CVE-2020-3759","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"Snake Keylogger","id":"NEW","g":"keylogger malware","p":null,"r":null},{"m":"CVE-2020-3254","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"host_news_mod_mod.msi","id":"NEW","g":"windows installer package","p":null,"r":null},{"m":"b.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Agent Tesla","id":"NEW","g":"stealer malware","p":null,"r":null},{"m":"CVE-2020-3259","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-3255","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2018-6882","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2021-32648","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-3760","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"tasklist","id":"NEW","g":"windows command line tool","p":null,"r":null},{"m":"CVE-2020-3196","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-3741","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"HTA file","id":"NEW","g":"html application file","p":null,"r":null},{"m":"Adobe Acrobat Reader","id":"NEW","g":"pdf viewer software","p":null,"r":null},{"m":"CVE-2020-3195","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-7047","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-35730","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-3111","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-7048","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"file.htm","id":"NEW","g":"html file","p":null,"r":null},{"m":"CVE-2018-13379","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"Windows Script Host","id":"NEW","g":"windows automation environment","p":"E231","r":"p"},{"m":"CVE-2020-12641","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2020-3110","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"Encrpt3d Ransomware","id":"NEW","g":"ransomware family","p":null,"r":null},{"m":"njRAT","id":"NEW","g":"remote access trojan","p":null,"r":null},{"m":"CVE-2020-3125","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"Cuba Ransomware","id":"NEW","g":"ransomware family","p":null,"r":null},{"m":"Рахунки за выполненные работы от 11.12.2018.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"рахунки компания технік.zip","id":"NEW","g":"zip archive","p":null,"r":null},{"m":"УКАЗ ПРЕЗИДЕНТА УКРАЇНИ №151_2022.mp4.lnk","id":"NEW","g":"windows shortcut file","p":null,"r":null},{"m":"./рахунки ООО Спецстрой.xls.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"До оплати рах.ф. 74 - 2018р.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"Інформація щодо наявності вакансій та їх укомплектування.xls","id":"NEW","g":"excel spreadsheet","p":null,"r":null},{"m":"inf.zip","id":"NEW","g":"zip archive","p":null,"r":null},{"m":"List of necessary things for the provision of military humanitarian assistance to Ukraine.lnk","id":"NEW","g":"windows shortcut file","p":null,"r":null},{"m":"spisok_24.08.2018.com","id":"NEW","g":"executable file","p":null,"r":null},{"m":"shahed-136.rar","id":"NEW","g":"rar archive","p":null,"r":null},{"m":"довідка.zip","id":"NEW","g":"zip archive","p":null,"r":null},{"m":"anketa_21_3_2018 (4).js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"documents (5).js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"./перевірити діяльність.html","id":"NEW","g":"html file","p":null,"r":null},{"m":"Гуманітарна катастрофа України з 24 лютого 2022 року.xls","id":"NEW","g":"excel spreadsheet","p":null,"r":null},{"m":"Лица, которые переместились из АР Крым и районов проведения антитерротистической операции.com","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Информация.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"dovidka.chm","id":"NEW","g":"compiled html help file","p":null,"r":null},{"m":"TRYxaEbX","id":"NEW","g":"powershell script","p":null,"r":null},{"m":"WinRAR","id":"NEW","g":"archiving software","p":null,"r":null},{"m":"oYUuQbXu","id":"NEW","g":"malicious file","p":null,"r":null},{"m":"CVE-2017-17689","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2017-17688","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"./decpded_page.html","id":"NEW","g":"html file","p":null,"r":null},{"m":"stage1.ps1","id":"NEW","g":"powershell script","p":null,"r":null},{"m":"Про збереження відеоматеріалів з фіксацією злочинних дій армії російської федерації.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"pax_2023_ab1058..js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"Заявка.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"e.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"c.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"Газпромбанк заказ.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"CVE-2018-7602","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"junit.js","id":"NEW","g":"javascript file","p":null,"r":null},{"m":"CVE-2022-23134","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"CVE-2022-23131","id":"NEW","g":"security vulnerability","p":null,"r":null},{"m":"Архів листування російської терористки М.Колєди.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"Google Drive","id":"NEW","g":"cloud storage service","p":null,"r":null},{"m":"WhatsApp","id":"NEW","g":"messaging application","p":null,"r":null},{"m":"stage2.ps1","id":"NEW","g":"powershell script","p":null,"r":null},{"m":"zakon.rar","id":"NEW","g":"rar archive","p":null,"r":null},{"m":"Windows","id":"NEW","g":"operating system","p":null,"r":null},{"m":"iOS","id":"NEW","g":"mobile operating system","p":null,"r":null},{"m":"Диверсанти file‮‮rar.scr","id":"NEW","g":"screen saver file","p":null,"r":null},{"m":"Електронний запит.exe","id":"NEW","g":"executable file","p":null,"r":null},{"m":"news.bat","id":"NEW","g":"batch file","p":null,"r":null},{"m":"icloud.cmd","id":"NEW","g":"command script","p":null,"r":null},{"m":"iclouds.cmd","id":"NEW","g":"command script","p":null,"r":null},{"m":"RoarBat","id":"NEW","g":"batch file","p":null,"r":null},{"m":"BootPatch","id":"NEW","g":"malware family","p":null,"r":null},{"m":"ARGUEPATCH","id":"NEW","g":"malware family","p":null,"r":null},{"m":"NTDSDumpEx","id":"NEW","g":"credential dumping tool","p":null,"r":null},{"m":"SSH","id":"NEW","g":"network protocol","p":null,"r":null},{"m":"nmap","id":"NEW","g":"network scanner","p":null,"r":null},{"m":"hostname","id":"NEW","g":"network command","p":null,"r":null},{"m":"dnscat","id":"NEW","g":"command and control tool","p":null,"r":null},{"m":"systeminfo","id":"NEW","g":"system information tool","p":null,"r":null},{"m":"sserv.jpg","id":"NEW","g":"image file","p":null,"r":null},{"m":"Cobalt Strike Beacon","id":"NEW","g":"remote access tool","p":null,"r":null},{"m":"LONEPAGE","id":"NEW","g":"malware family","p":null,"r":null},{"m":"whois","id":"NEW","g":"domain information tool","p":null,"r":null},{"m":"q.js","id":"NEW","g":"javascript file","p":null,"r":null}]}

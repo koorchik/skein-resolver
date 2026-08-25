@@ -1,0 +1,524 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 640 canonicals"
+Entities:
+E1. t-me.io
+E2. file.io
+E3. center-gos.top
+E4. cs1.wpc-v0cdn.org [aka wpc-v0cdn.org]
+E5. frge.io
+E6. tg.cyou
+E7. mocky.io
+E8. central-gos.top
+E9. nirsoft.me
+E10. shormanz.com
+E11. propertyiran.ir
+E12. censys.io
+E13. i1t.me
+E14. tgeo.link
+E15. mail.aet.in.ua
+E16. gov.ua
+E17. gov-ua.info
+E18. portal.nazk.gov.ua [aka portal.nazk.org.ua]
+E19. dis.gov.ua
+E20. bank.gov.ua
+E21. pbank.co.ua
+E22. dsszzi.gov.ua
+E23. cert.gov.ua
+E24. ndibk.gov.ua
+E25. ticket.cyberpolice.gov.ua
+E26. bdf.gov.ua
+E27. msp.gov.ua [aka www.msp.gov.ua]
+E28. rnbo.gov.ua
+E29. t--t.me
+E30. tg-me.pro
+E31. 0-t.me
+E32. 7tt.me
+E33. net.frge.io
+E34. 4-t.me
+E35. ukr.net.frge.io
+E36. _.ukr.net.frge.io
+E37. kitten-268.frge.io
+E38. telesecurity.org
+E39. tsecurity.sbs
+E40. airmauritiusticket.com
+E41. new-tech-savvy.com
+E42. sec-t.info
+E43. chis-gos.top
+E44. cdnauthsoft.com
+E45. cve.mitre.org
+E46. mockbin.org
+E47. apitelegram.org
+E48. telsec.org
+E49. bitbucket.org
+E50. steycools.pw
+E51. alt-2cdn.net
+E52. domthr.xyz
+E53. teiergam.com
+E54. co-uah.top
+E55. ukenlog.com
+E56. tronogram.com
+E57. ginaengg.com
+E58. unayt.ru
+E59. fernandoherrera.me
+E60. filebin.net
+E61. telegraom.me
+E62. teiegram1.me
+E63. blinkij.com
+E64. cloudlnk.org
+E65. europadonnaireland.org
+E66. www.dropbox.com
+E67. arentuk.com
+E68. ns.ns3-dns.com [aka ns3-dns.com]
+E69. uaccsnet.com
+E70. uasystdoc.com
+E71. adobeprotectcheck.com
+E72. ns.ns2-dns.com [aka ns2-dns.com]
+E73. ukrstnet.com
+E74. agreminj.com
+E75. webknives.com
+E76. run.mocky.io
+E77. mouseoiet.fun
+E78. webk-telegram.sbs
+E79. telegram.org.security.ohsxy.com
+E80. webz-telegram.sbs
+E81. security-check.telegram.org.ohsxy.com
+E82. yotsubasociety.website
+E83. pastebin.com
+E84. afi-ukraine.org
+E85. an-gos.top
+E86. alf-gos.top
+E87. topadm.top
+E88. cerv-gos.top
+E89. alfa-gos.top
+E90. pro-gos.top
+E91. badge-gos.top
+E92. admukr.top
+E93. admru.top
+E94. admukr.club
+E95. coinerpay.top
+E96. rbadm.top
+E97. an-ukr.top
+E98. project2.top
+E99. korrespondentnet.webflow.io
+E100. admus.top
+E101. cloue.link
+E102. data.syncthing.net
+E103. crash.syncthing.net
+E104. upgrades.syncthing.net
+E105. aleimportadora.net
+E106. mail.arlingtonhousing.us
+E107. documentreader.net
+E108. as49447.net
+E109. everything-everywhere.at.ply.gg
+E110. dishsouq.com
+E111. unetset.com
+E112. portal.msrc.microsoft.com
+E113. protectraid.com
+E114. cdn.discordapp.com
+E115. me-cloud.link
+E116. telegram.org-a0dm91dk31i.cloue.link
+E117. claud.in
+E118. grabify.link
+E119. telegram.org.t.me-cloud.link
+E120. telegram.org-a0dk3dm91iu.tgeo.link
+E121. coagula.online
+E122. 1000020.xyz
+E123. uacompensation.xyz
+E124. duhodown.fun
+E125. uatax-compens.xyz [aka uatax-compenses.xyz]
+E126. devtools.bond
+E127. diplombar.by
+E128. tax-compenses.xyz
+E129. barnsertr.com
+E130. dnspod.com
+E131. star-cz.ddns.net
+E132. nais-gov.com
+E133. datagroup.ddns.net
+E134. www.msftncsi.com
+E135. bul-opros.top
+E136. apps-opros.top
+E137. aff-opros.top
+E138. afi-opros.top
+E139. co-opros.top
+E140. amo-opros.top
+E141. blopik.com
+E142. hillespostelnm.eu
+E143. rivierafamily.com
+E144. iplogger.com
+E145. kissmafiabeforyoudied.eu
+E146. napropertyhub.eu
+E147. drimzis.com
+E148. pomoshnikrbx.site
+E149. hopentools.site
+E150. eumr.site
+E151. 1833.site
+E152. 8003659902.site
+E153. courtgova.site
+E154. site-1.work
+E155. jokoloret.ru
+E156. abracodabugalimpopo.ru
+E157. tortunas.ru
+E158. coudzoom.ru
+E159. againandagaingmorder.ru
+E160. iqhost.ru
+E161. rmssrv.ru
+E162. cafeteriumups.ru
+E163. potrakit.ru
+E164. superops.ai
+E165. superdadymster.ru
+E166. verofes.com
+E167. fluoxi.com
+E168. super777bomba.ru
+E169. maxteroper.ru
+E170. jokotras.ru
+E171. milotrad.ru
+E172. hopentools.ru
+E173. webhook.site
+E174. prostotaknet.net
+E175. mst-ukr.net
+E176. trueadm.top
+E177. telegrad.info
+E178. teleqram.info
+E179. tax-compensation.xyz
+E180. ua-compensations.xyz
+E181. uam-compensation.xyz
+E182. britxec.com
+E183. compensation-ukr.com
+E184. comperssw.fun
+E185. telecomds.online
+E186. kowersize.fun
+E187. boddyshow.fun
+E188. bluepablo.fun
+E189. swinj.online
+E190. compensationukr.com
+E191. howlcars.fun
+E192. teierqam.org
+E193. bow-gos.top
+E194. zaikaopentra.com.ru
+E195. tvpharm.ru
+E196. telegram-click.ru
+E197. simplecloud.ru
+E198. alegoomaster.com
+E199. www.michiganmastereltiempo.com
+E200. golosdruga.ru
+E201. kismamabeforyougo.ru
+E202. big-uah.top
+E203. ipapi.co
+E204. uasettings.com
+E205. pas-ukr.net
+E206. uknetlogin.com
+E207. pay.uacompensation.xyz
+E208. myua-compensations.xyz
+E209. ec-compensation.xyz
+E210. expeditionabroad.com
+E211. uasetukr.com
+E212. telegram.uk.net
+E213. empoweringparents.shop
+E214. baidencult.com
+E215. peer-gos.top
+E216. internetcygane.ru
+E217. erinekenney.com
+E218. int-ukr.net
+E219. funedunet.com
+E220. integramultimedia.com.mx
+E221. ipv6-wpnc.net
+E222. akaluij.com
+E223. foundpomoshi.com
+E224. ghaniyu.com
+E225. internet.bs
+E226. gondurasonline.ru
+E227. syncthing.net
+E228. files-ukr.net
+E229. downloadrezerves.ru
+E230. plexbd.net
+E231. sismasterhome.ru
+E232. superops.com
+E233. filterfullproperty.ru
+E234. president.gov.ua.administration.vakansiyi.administration.president.gov-ua.info
+E235. nbu.gov.ua
+E236. mail.numina.md
+E237. mail-ukr.net
+E238. mail-gov-ua.frge.io
+E239. online.ua
+E240. mail.lebsack.de
+E241. aten.ua
+E242. tax-gov-ua.com
+E243. compensations-ukrain.bar
+E244. ua-compensation.top
+E245. i-like-hokku.co.ua
+E246. griselda.co.ua
+E247. biches-yeah.co.ua
+E248. the-new-age.co.ua
+E249. dsns.com.ua
+E250. ukainua.com
+E251. uabayrakua.com
+E252. ukrainecenter.yolasite.com
+E253. 2fa-ukr.net
+E254. a3-ukr.net
+E255. ukrainebayra.com
+E256. acc-ukr.net
+E257. t-online.de
+E258. gondurasonline.ug
+E259. chimeramarket24.online [aka chimeramarketplace24.online]
+E260. chimeramarketplace.online
+E261. listen.servemp3.com
+E262. aon.at
+E263. ua-compens.top [aka ua-compenses.top]
+E264. edopomogaonline.yolasite.com
+E265. oon24opros.yolasite.com
+E266. euro24dopomoga0.yolasite.com
+E267. ua30.gov.ua
+E268. agro-sk.com.ua
+E269. griselda-edu.com.ua
+E270. calendar.stib.com.ua
+E271. dpsu-gov-ua.com
+E272. www.adelaida.ua
+E273. yeah-biches.kyiv.ua
+E274. tiloraso.ru
+E275. griselda.biz.ua
+E276. gurt.duna.ua
+E277. id.court.gov.ua
+E278. in-ukr.net
+E279. web-ukr.net
+E280. k-ukr.net
+E281. 0-ukr.net
+E282. v-ukr.net
+E283. uc-ukr.net
+E284. 1-ukr.net
+E285. ck-ukr.net
+E286. l-ukr.net
+E287. mail.nais-gov.org [aka nais-gov.org]
+E288. mail.kzp.bg
+E289. bookgames.pw
+E290. email.cz
+E291. protonmail.com
+E292. shorturl.at
+E293. vertusupportjk.org
+E294. lnk.ukr-compens.xyz
+E295. off.ukr-compens.xyz
+E296. ua-taxes-compens.xyz
+E297. mail.lechateaudelatour.fr
+E298. pay.ukr-compens.xyz
+E299. private-ukr.net
+E300. africathrillthes.pw
+E301. revivalsecularas.pw
+E302. bloockflad.pw
+E303. next24.gg-pay.me
+E304. zallesman.ru
+E305. www.symantec.com
+E306. infomalilopera.ru
+E307. kissmafiabeforyoudied.ru
+E308. vljsport.eu.com
+E309. droopily.eu
+E310. post.mil.gov.ua
+E311. apokil.com
+E312. shikjil.com
+E313. uasystnet.com
+E314. axikok.com
+E315. ua-calendar.firstcloudit.com
+E316. aplusdesktop.workers.dev
+E317. armylpus.workers.dev
+E318. desktopaplus.workers.dev
+E319. ochiplus.workers.dev
+E320. desktopapluscom.workers.dev
+E321. telegram-wap.me
+E322. tme-id.com
+E323. webk-telegram.icu
+E324. tme-id.ru
+E325. telegram-mobile.ru
+E326. zalamafiapopcultur.eu
+E327. killredls.pw
+E328. seznam.cz
+E329. patient-docs-mail.com
+E330. humanitarydp.ru
+E331. cityofuganda.ug
+E332. zaikaopentra.com.ug
+E333. zaikaopentra-com-ug.online
+E334. zaikaopentra-com-ug.su
+E335. kilomunara.com
+E336. telegram-wed.id
+E337. dublebomber.ru
+E338. moyabelorussiya.by
+E339. propertyminsk.by
+E340. restmantra.by
+E341. zasadacafe.by
+E342. ansaigon.com
+E343. linedrv.com
+E344. ukrsets.com
+E345. site-ukr.net
+E346. settings-ukr.net [aka settingsukr.net]
+E347. drv2ms.com
+E348. td-ukr.net
+E349. ukrsett.com
+E350. rms-server.tektonit.ru
+E351. 00-l.ru
+E352. billiopa.com
+E353. dayzilons.pw
+E354. dezword.com
+E355. kohhd.com
+E356. anidoz.com
+E357. courtgova.online
+E358. humanitarydp.ug
+Mentions:
+M1. "censys.io" (Domain) — options: E1, E2, E3, E4
+M2. "shodan.io" (Domain) — options: E1, E10, E11, E12
+M3. "post.mil.gov.ua" (Domain) — options: E15, E16, E17, E18
+M4. "dis.gov.ua" (Domain) — options: E17, E16, E21, E24
+M5. "nbu.gov.ua" (Domain) — options: E20, E28, E16, E17
+M6. "t-me.io" (Domain) — options: E29, E2, E13, E30
+M7. "frge.io" (Domain) — options: E1, E6, E33, E14
+M8. "criticalosl.tech" (Domain) — options: E38, E39, E3, E40
+M9. "cs1.wpc-v0cdn.org" (Domain) — options: E44, E45, E46, E47
+M10. "tg.cyou" (Domain) — options: E30, E14, E52, E53
+M11. "nirsoft.me" (Domain) — options: E1, E32, E31, E13
+M12. "i1t.me" (Domain) — options: E1, E31, E32, E29
+M13. "bitbucket.org" (Domain) — options: E63, E47, E48, E13
+M14. "uasystnet.com" (Domain) — options: E67, E68, E69, E70
+M15. "mocky.io" (Domain) — options: E1, E76, E12, E46
+M16. "tsecurity.sbs" (Domain) — options: E38, E78, E42, E79
+M17. "cve.mitre.org" (Domain) — options: E38, E47, E84, E39
+M18. "telesecurity.org" (Domain) — options: E39, E48, E79, E47
+M19. "peer-gos.top" (Domain) — options: E54, E85, E3, E86
+M20. "admus.top" (Domain) — options: E92, E93, E87, E85
+M21. "uadop.webflow.io" (Domain) — options: E6, E99, E1, E12
+M22. "syncthing.net" (Domain) — options: E102, E103, E104, E60
+M23. "cdnauthsoft.com" (Domain) — options: E9, E110, E71, E4
+M24. "cloue.link" (Domain) — options: E115, E116, E64, E117
+M25. "domthr.xyz" (Domain) — options: E6, E122, E123, E124
+M26. "ns.ns3-dns.com" (Domain) — options: E72, E129, E130, E131
+M27. "ns.ns2-dns.com" (Domain) — options: E68, E131, E130, E71
+M28. "cels-opros.top" (Domain) — options: E135, E136, E137, E138
+M29. "droopily.eu" (Domain) — options: E141, E67, E142, E143
+M30. "webhook.site" (Domain) — options: E148, E75, E149, E150
+M31. "unayt.ru" (Domain) — options: E155, E156, E157, E158
+M32. "superops.com" (Domain) — options: E164, E165, E166, E71
+M33. "potrakit.ru" (Domain) — options: E58, E155, E156, E170
+M34. "hopentools.site" (Domain) — options: E172, E75, E13, E153
+M35. "trust-certificate.net" (Domain) — options: E38, E174, E175, E105
+M36. "sec-t.info" (Domain) — options: E38, E17, E177, E39
+M37. "ec-compensation.xyz" (Domain) — options: E52, E6, E179, E123
+M38. "tgeo.link" (Domain) — options: E101, E120, E6, E118
+M39. "comperssw.fun" (Domain) — options: E186, E187, E188, E124
+M40. "telsec.org" (Domain) — options: E38, E178, E47, E42
+M41. "chis-gos.top" (Domain) — options: E85, E88, E86, E90
+M42. "coudzoom.ru" (Domain) — options: E155, E156, E194, E58
+M43. "sismasterhome.ru" (Domain) — options: E161, E169, E198, E156
+M44. "co-uah.top" (Domain) — options: E202, E139, E8, E97
+M45. "pastebin.com" (Domain) — options: E60, E74, E71, E63
+M46. "uacompensation.xyz" (Domain) — options: E180, E52, E207, E181
+M47. "arentuk.com" (Domain) — options: E210, E211, E71, E212
+M48. "central-gos.top" (Domain) — options: E3, E86, E88, E89
+M49. "internet.bs" (Domain) — options: E13, E216, E72, E217
+M50. "fluoxi.com" (Domain) — options: E141, E203, E71, E222
+M51. "internetcygane.ru" (Domain) — options: E58, E196, E225, E156
+M52. "t--t.me" (Domain) — options: E32, E31, E1, E34
+M53. "filebin.net" (Domain) — options: E227, E228, E105, E229
+M54. "maxteroper.ru" (Domain) — options: E158, E231, E165, E156
+M55. "gov.ua" (Domain) — options: E17, E234, E20, E19
+M56. "mail.aet.in.ua" (Domain) — options: E84, E236, E237, E238
+M57. "gov-ua.info" (Domain) — options: E234, E16, E242, E23
+M58. "antination.kherson.ua" (Domain) — options: E67, E84, E243, E244
+M59. "pbank.co.ua" (Domain) — options: E20, E246, E25, E247
+M60. "ukrainebayra.com" (Domain) — options: E84, E250, E251, E71
+M61. "yeah-biches.kyiv.ua" (Domain) — options: E245, E84, E247, E15
+M62. "afi-ukraine.org" (Domain) — options: E97, E253, E138, E15
+M63. "online.ua" (Domain) — options: E21, E257, E258, E259
+M64. "aten.ua" (Domain) — options: E15, E84, E16, E245
+M65. "ukrainecenter.yolasite.com" (Domain) — options: E84, E264, E265, E21
+M66. "dsns.com.ua" (Domain) — options: E72, E19, E268, E21
+M67. "i-like-hokku.co.ua" (Domain) — options: E21, E246, E97, E272
+M68. "biches-yeah.co.ua" (Domain) — options: E245, E273, E21, E246
+M69. "milotrad.ru" (Domain) — options: E155, E200, E170, E156
+M70. "griselda.co.ua" (Domain) — options: E245, E272, E275, E21
+M71. "agro-sk.com.ua" (Domain) — options: E21, E249, E245, E270
+M72. "gurt.duna.ua" (Domain) — options: E245, E23, E277, E241
+M73. "an-ukr.top" (Domain) — options: E85, E92, E84, E93
+M74. "ukr.net" (Domain) — options: E279, E280, E281, E282
+M75. "dpsu-gov-ua.com" (Domain) — options: E17, E132, E242, E287
+M76. "the-new-age.co.ua" (Domain) — options: E272, E246, E21, E245
+M77. "portugalmail.pt" (Domain) — options: E288, E289, E290, E287
+M78. "pay.ukr-compens.xyz" (Domain) — options: E294, E295, E190, E125
+M79. "mail.kzp.bg" (Domain) — options: E290, E237, E15, E106
+M80. "compensation-ukr.com" (Domain) — options: E190, E209, E243, E244
+M81. "privat24.ua-wallet.pw" (Domain) — options: E21, E299, E300, E25
+M82. "www.adelaida.ua" (Domain) — options: E245, E27, E66, E21
+M83. "infomailforyoumak.ru" (Domain) — options: E288, E306, E156, E290
+M84. "hillespostelnm.eu" (Domain) — options: E308, E309, E310, E47
+M85. "mail.nais-gov.org" (Domain) — options: E132, E106, E238, E236
+M86. "uasetukr.com" (Domain) — options: E67, E97, E204, E71
+M87. "calendar.stib.com.ua" (Domain) — options: E245, E315, E21, E249
+M88. "aplusmodgovua.workers.dev" (Domain) — options: E6, E316, E15, E317
+M89. "compensationukr.com" (Domain) — options: E183, E71, E243, E244
+M90. "krasavchikoleg.net" (Domain) — options: E155, E105, E103, E148
+M91. "telegram-wed.id" (Domain) — options: E212, E321, E322, E323
+M92. "compensations-ukrain.bar" (Domain) — options: E84, E183, E208, E21
+M93. "lnk.ukr-compens.xyz" (Domain) — options: E64, E295, E298, E183
+M94. "zarabovannyok.eu" (Domain) — options: E67, E309, E326, E148
+M95. "off.ukr-compens.xyz" (Domain) — options: E84, E294, E298, E67
+M96. "kilomunara.com" (Domain) — options: E67, E71, E311, E222
+M97. "email.cz" (Domain) — options: E328, E291, E131, E288
+M98. "humanitarydp.ug" (Domain) — options: E330, E6, E67, E331
+M99. "zaikaopentra.com.ug" (Domain) — options: E67, E222, E194, E333
+M100. "telegrad.info" (Domain) — options: E178, E336, E212, E17
+M101. "diplombar.by" (Domain) — options: E67, E337, E144, E338
+M102. "nais-gov.com" (Domain) — options: E287, E17, E342, E43
+M103. "tax-gov-ua.com" (Domain) — options: E296, E271, E17, E16
+M104. "ukrsett.com" (Domain) — options: E67, E212, E344, E71
+M105. "ruvds.com" (Domain) — options: E347, E67, E344, E71
+M106. "ukrstnet.com" (Domain) — options: E67, E212, E313, E71
+M107. "rmssrv.ru" (Domain) — options: E350, E156, E58, E159
+M108. "dnspod.com" (Domain) — options: E352, E353, E354, E355
+M109. "gondurasonline.ug" (Domain) — options: E357, E226, E224, E121
+
+=== RESPONSE (76.0s, in 9634 / out 17648 tok, stop) ===
+{"v":[{"m":"censys.io","id":"NEW","g":"a domain for internet scanning and analysis","p":null,"r":null},{"m":"shodan.io","id":"NEW","g":"a search engine for internet-connected devices","p":null,"r":null},{"m":"post.mil.gov.ua","id":"NEW","g":"a military postal domain in Ukraine","p":"E16","r":"p"},{"m":"dis.gov.ua","id":"NEW","g":"a Ukrainian government domain","p":"E16","r":"p"},{"m":"nbu.gov.ua","id":"NEW","g":"National Bank of Ukraine domain","p":"E16","r":"p"},{"m":"t-me.io","id":"NEW","g":"a Telegram-related domain","p":null,"r":null},{"m":"frge.io","id":"NEW","g":"a domain used for redirecting traffic","p":null,"r":null},{"m":"criticalosl.tech","id":"NEW","g":"a technology-related domain","p":null,"r":null},{"m":"cs1.wpc-v0cdn.org","id":"NEW","g":"a CDN domain","p":null,"r":null},{"m":"tg.cyou","id":"NEW","g":"a Telegram-related domain","p":null,"r":null},{"m":"nirsoft.me","id":"NEW","g":"domain associated with NirSoft","p":null,"r":null},{"m":"i1t.me","id":"NEW","g":"a URL shortening domain","p":null,"r":null},{"m":"bitbucket.org","id":"NEW","g":"a git repository hosting service","p":null,"r":null},{"m":"uasystnet.com","id":"NEW","g":"a Ukrainian systems network domain","p":null,"r":null},{"m":"mocky.io","id":"NEW","g":"a mock API service domain","p":null,"r":null},{"m":"tsecurity.sbs","id":"NEW","g":"a security-related domain","p":null,"r":null},{"m":"cve.mitre.org","id":"NEW","g":"the Common Vulnerabilities and Exposures site","p":null,"r":null},{"m":"telesecurity.org","id":"NEW","g":"a security-related domain","p":null,"r":null},{"m":"peer-gos.top","id":"NEW","g":"a government-themed domain","p":null,"r":null},{"m":"admus.top","id":"NEW","g":"an administrative domain","p":null,"r":null},{"m":"uadop.webflow.io","id":"NEW","g":"a website hosted on webflow","p":null,"r":null},{"m":"syncthing.net","id":"NEW","g":"a file synchronization service domain","p":null,"r":null},{"m":"cdnauthsoft.com","id":"NEW","g":"a CDN for authentication software","p":null,"r":null},{"m":"cloue.link","id":"NEW","g":"a link shortening domain","p":null,"r":null},{"m":"domthr.xyz","id":"NEW","g":"a domain","p":null,"r":null},{"m":"ns.ns3-dns.com","id":"NEW","g":"a nameserver domain","p":null,"r":null},{"m":"ns.ns2-dns.com","id":"NEW","g":"a nameserver domain","p":null,"r":null},{"m":"cels-opros.top","id":"NEW","g":"a survey-related domain","p":null,"r":null},{"m":"droopily.eu","id":"NEW","g":"a domain","p":null,"r":null},{"m":"webhook.site","id":"NEW","g":"a website for testing webhooks","p":null,"r":null},{"m":"unayt.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"superops.com","id":"NEW","g":"a domain for SuperOps","p":null,"r":null},{"m":"potrakit.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"hopentools.site","id":"NEW","g":"a tools-related domain","p":null,"r":null},{"m":"trust-certificate.net","id":"NEW","g":"a certificate-related domain","p":null,"r":null},{"m":"sec-t.info","id":"NEW","g":"a security-related domain","p":null,"r":null},{"m":"ec-compensation.xyz","id":"NEW","g":"a compensation-related domain","p":null,"r":null},{"m":"tgeo.link","id":"NEW","g":"a link shortening domain","p":null,"r":null},{"m":"comperssw.fun","id":"NEW","g":"a compensation-related domain","p":null,"r":null},{"m":"telsec.org","id":"NEW","g":"a security-related domain","p":null,"r":null},{"m":"chis-gos.top","id":"NEW","g":"a government-themed domain","p":null,"r":null},{"m":"coudzoom.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"sismasterhome.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"co-uah.top","id":"NEW","g":"a Ukrainian-themed domain","p":null,"r":null},{"m":"pastebin.com","id":"NEW","g":"a text storage service domain","p":null,"r":null},{"m":"uacompensation.xyz","id":"NEW","g":"a compensation-related domain","p":null,"r":null},{"m":"arentuk.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"central-gos.top","id":"NEW","g":"a government-themed domain","p":null,"r":null},{"m":"internet.bs","id":"NEW","g":"an internet domain","p":null,"r":null},{"m":"fluoxi.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"internetcygane.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"t--t.me","id":"NEW","g":"a Telegram-related domain","p":null,"r":null},{"m":"filebin.net","id":"NEW","g":"a file sharing service domain","p":null,"r":null},{"m":"maxteroper.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"gov.ua","id":"NEW","g":"the Ukrainian government domain","p":null,"r":null},{"m":"mail.aet.in.ua","id":"NEW","g":"a mail domain in Ukraine","p":null,"r":null},{"m":"gov-ua.info","id":"NEW","g":"a government-themed domain","p":"E16","r":"v"},{"m":"antination.kherson.ua","id":"NEW","g":"a domain in Kherson, Ukraine","p":null,"r":null},{"m":"pbank.co.ua","id":"NEW","g":"a bank domain in Ukraine","p":null,"r":null},{"m":"ukrainebayra.com","id":"NEW","g":"a Ukrainian-themed domain","p":null,"r":null},{"m":"yeah-biches.kyiv.ua","id":"NEW","g":"a domain in Kyiv, Ukraine","p":null,"r":null},{"m":"afi-ukraine.org","id":"NEW","g":"a Ukrainian-themed domain","p":null,"r":null},{"m":"online.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"aten.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"ukrainecenter.yolasite.com","id":"NEW","g":"a Ukrainian-themed site on yolasite","p":null,"r":null},{"m":"dsns.com.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"i-like-hokku.co.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"biches-yeah.co.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"milotrad.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"griselda.co.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"agro-sk.com.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"gurt.duna.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"an-ukr.top","id":"NEW","g":"a Ukrainian-themed domain","p":null,"r":null},{"m":"ukr.net","id":"NEW","g":"a Ukrainian internet portal domain","p":null,"r":null},{"m":"dpsu-gov-ua.com","id":"NEW","g":"a government-themed domain","p":null,"r":null},{"m":"the-new-age.co.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"portugalmail.pt","id":"NEW","g":"a Portuguese mail domain","p":null,"r":null},{"m":"pay.ukr-compens.xyz","id":"NEW","g":"a compensation-related payment domain","p":null,"r":null},{"m":"mail.kzp.bg","id":"NEW","g":"a Bulgarian mail domain","p":null,"r":null},{"m":"compensation-ukr.com","id":"NEW","g":"a compensation-related domain","p":null,"r":null},{"m":"privat24.ua-wallet.pw","id":"NEW","g":"a wallet-related domain","p":null,"r":null},{"m":"www.adelaida.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"infomailforyoumak.ru","id":"NEW","g":"a Russian mail domain","p":null,"r":null},{"m":"hillespostelnm.eu","id":"NEW","g":"a domain","p":null,"r":null},{"m":"mail.nais-gov.org","id":"NEW","g":"a government-themed mail domain","p":null,"r":null},{"m":"uasetukr.com","id":"NEW","g":"a Ukrainian-themed domain","p":null,"r":null},{"m":"calendar.stib.com.ua","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"aplusmodgovua.workers.dev","id":"NEW","g":"a site hosted on workers.dev","p":null,"r":null},{"m":"compensationukr.com","id":"NEW","g":"a compensation-related domain","p":null,"r":null},{"m":"krasavchikoleg.net","id":"NEW","g":"a domain","p":null,"r":null},{"m":"telegram-wed.id","id":"NEW","g":"a Telegram-related domain","p":null,"r":null},{"m":"compensations-ukrain.bar","id":"NEW","g":"a compensation-related domain","p":null,"r":null},{"m":"lnk.ukr-compens.xyz","id":"NEW","g":"a compensation-related link domain","p":null,"r":null},{"m":"zarabovannyok.eu","id":"NEW","g":"a domain","p":null,"r":null},{"m":"off.ukr-compens.xyz","id":"NEW","g":"a compensation-related domain","p":null,"r":null},{"m":"kilomunara.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"email.cz","id":"NEW","g":"a Czech email domain","p":null,"r":null},{"m":"humanitarydp.ug","id":"NEW","g":"a humanitarian-related domain in Uganda","p":"E330","r":"v"},{"m":"zaikaopentra.com.ug","id":"NEW","g":"a Ugandan domain","p":null,"r":null},{"m":"telegrad.info","id":"NEW","g":"a Telegram-related domain","p":null,"r":null},{"m":"diplombar.by","id":"NEW","g":"a Belarusian domain","p":null,"r":null},{"m":"nais-gov.com","id":"NEW","g":"a government-themed domain","p":null,"r":null},{"m":"tax-gov-ua.com","id":"NEW","g":"a government-themed domain","p":null,"r":null},{"m":"ukrsett.com","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"ruvds.com","id":"NEW","g":"a domain","p":null,"r":null},{"m":"ukrstnet.com","id":"NEW","g":"a Ukrainian domain","p":null,"r":null},{"m":"rmssrv.ru","id":"NEW","g":"a Russian domain","p":null,"r":null},{"m":"dnspod.com","id":"NEW","g":"a DNS service domain","p":null,"r":null},{"m":"gondurasonline.ug","id":"NEW","g":"a Ugandan domain","p":null,"r":null}]}

@@ -1,0 +1,225 @@
+=== REQUEST (ollama gemma4:31b) ===
+--- instructions ---
+You are an entity-resolution judge for an incremental entity registry. For every mention you decide two things: which entity it is, and how it relates to the registry's broader or narrower entities.
+
+The source lists its known entities once, as `E1…En`. Every mention names the subset of those entities that plausibly match it. Use the numbers; never write a name where a number is asked for.
+
+## 1. `id` — identity (exact match)
+
+Answer `"NEW"` when the mention refers to an entity that is none of its listed options; otherwise the option's `E` number. Only choose an existing entity when the supplied names and aliases support identity. Category, role, behavior, relationships, co-occurrence, and thematic similarity are NOT identity evidence. The order of options is retrieval score, which is not evidence.
+
+Same entity — the names differ only in written form:
+
+- a vendor, publisher, or organization prefix present in one ("Acme Foo" / "Foo");
+- spacing, punctuation, hyphenation, case ("FooBar" / "Foo Bar");
+- a parenthetical or bracketed descriptor ("foo (the loader used here)" / "foo");
+- a file extension, platform, or implementation suffix ("foo.bin" / "foo", "Foo .NET" / "Foo");
+- a generic type word stating only what kind of thing it is ("Foo tool" / "Foo");
+- an acronym beside its own expansion;
+- a transliteration or translation of the same proper name.
+
+Different entities, however related — version, edition, year or identifier differs; one is a part, component or member of the other; one is a file or artifact and the other the program that made it; the base names differ. When names are alike except for an identifier or a number, match those characters exactly and never choose an option whose identifier differs. When a name pairs a structured identifier with a descriptive label — in either order, one of them usually bracketed ("K-12 (Foo)", "Foo (K-12)") — the identifier is what the name identifies. Choose the option carrying that identifier, and treat the bare label on its own as a different, broader entity.
+
+If in doubt, answer `"NEW"`: a duplicate is repairable, a wrong merge is not.
+
+## 2. `g` — gloss
+
+For every mention you did NOT link, one short factual description — at most twelve words, grounded in the source, **not restating the name**. It is used to retrieve this entity later, never as identity evidence. Use `null` when the source says nothing descriptive.
+
+## 3. `p` and `r` — the hierarchy relation
+
+Only for mentions you answered `"NEW"`. Unlike identity, this question is answered from what the entities ARE — your general knowledge of them — not from the source text. The source does not need to state, or even hint at, the relation.
+
+Set `p` to the `E` number of the listed entity the mention stands in a genuine narrower/broader relation to. Scan the WHOLE `E1…En` list for it: the right entity may be any listed entity, including one that another mention of this document put on the list. A mention's options row is identity retrieval only — the genuinely broader entity is usually NOT in it, because a component and the system it belongs to rarely resemble each other by name. When the mention is the narrower side, prefer the **narrowest** listed entity that is genuinely broader than it. Set `r` to one of four:
+
+- `"v"` — the listed entity is the mention **with a qualifier removed**: a version, edition, year, release, platform, or packaging variant. `Foo 2010` under `Foo`, `Foo 7` under `Foo`, `Foo (64-bit)` under `Foo`. Both name the same thing at different precision, and that qualifier is the only difference.
+- `"n"` — the mention is narrower for any other reason: a named instance under its type, a model under its product line, a derivative built on the listed base.
+- `"p"` — the mention is a distinct component, member, or subdivision of the listed entity.
+- `"b"` — the reverse direction: the mention is genuinely **broader** than the listed entity — the listed entity is a version, instance, or component of the mention. `Foo` mentioned when `Foo 2010` is already listed.
+
+An identifier that names a vulnerability, advisory, exploit, or ticket (`CVE-…`, `MS…-…`, a bulletin or issue number) is NOT narrower than the product it affects: a flaw lives IN a product without being a kind, version, or part of it. For such mentions answer `null` unless the listed entity is another naming of the same flaw.
+
+Ask it of every new entity, not only the obvious ones. You have just written each mention's gloss — use it: when a gloss names the base product, engine, family, or host system the mention is built on, and that entity appears anywhere in `E1…En`, that entity is the `p`. A gloss that says "X-based" or "component of X" while `p` is `null` is a contradiction. In particular, when several mentions of this document are versions, derivatives, components, or members of one base product that appears anywhere in `E1…En`, each of them gets that `p` — a run of siblings is the commonest case, not an exception. Set both to `null` when nothing listed is narrower or broader, when the link is merely topical, or when you cannot say what the relation is — a missing edge is recoverable, a wrong one distorts every later rollup. Never point `p` at the mention itself, and never set it on a mention you linked.
+
+## Output
+
+Source context bears on identity only, and only where it explicitly establishes an alias, identifier, transliteration, abbreviation, or unambiguous co-reference. The hierarchy question never depends on the source.
+
+Output one raw JSON object, no markdown fences, no commentary, one entry per mention, in order, keys exactly in the order `m`, `id`, `g`, `p`, `r` — the gloss is written before the hierarchy answer on purpose:
+{"v":[{"m":"M1","id":"E3","g":null,"p":null,"r":null},{"m":"M2","id":"NEW","g":"a 2010 release of the suite","p":"E1","r":"v"}]}
+
+--- text ---
+Source: "registry review at 164 canonicals"
+Entities:
+E1. install.msi
+E2. Microsoft Equation Editor
+E3. Remcos [aka RemcosRAT]
+E4. WinSCP
+E5. Meterpreter
+E6. RegAsm.exe
+E7. rfusclient.exe
+E8. Smokeloader
+E9. SQLite.Interop.dll
+E10. installer.exe
+E11. host_news_mod_mod.msi
+E12. AutoIt
+E13. stage1.ps1
+E14. spi.exe
+E15. stage2.ps1
+E16. GammaSteel.PS1
+E17. Paltalk
+E18. CCleaner.rar
+E19. CCleaner.exe
+E20. FileZilla
+E21. loader.exe
+E22. UkrScanner.rar
+E23. UkrScanner.exe (SFX)
+E24. FTP Commander
+E25. Claws Mail
+E26. CCleaner.zip
+E27. cmd.exe
+E28. MCMDiction.exe
+E29. plan_dsns.gov.ua.rar
+E30. Електронний план евакуації.rar
+E31. QuasarRAT
+E32. FTPGetter
+E33. Електронний план евакуації.exe
+E34. Електронний запит.exe
+E35. До оплати від 11.12.18.lzh
+E36. Інформація щодо наявності вакансій та їх укомплектування.xls
+E37. Рахунки и новые списки.lzh
+E38. b.exe
+E39. PowerShell (powershell.exe) [aka PowerShell]
+E40. Гуманітарна катастрофа України з 24 лютого 2022 року.xls
+E41. Adobe Flash Player
+E42. Windows Vista
+E43. major.exe
+E44. Double Kill
+E45. Mozilla Firefox
+E46. Foxmail
+E47. Agent Tesla [aka AgentTesla]
+E48. killself.bat
+E49. Trillian
+E50. Coowon Browser
+E51. Internet Explorer
+E52. Chedot Browser
+E53. GammaLoad.PS1
+E54. ckZ89.ExE
+E55. rundll32.exe
+E56. MISP
+E57. Win32k
+E58. Windows 7
+E59. Microsoft Windows
+E60. WS_FTP
+E61. Misha
+E62. jDownloader
+E63. rutserv.exe
+E64. powershell.exe
+E65. write.exe
+E66. VBScript
+E67. wsuscr.exe
+E68. ConfuserEx
+E69. Microsoft Edge
+E70. Google Chrome
+E71. mshta.exe
+E72. SmartAssembly .NET
+E73. wscript.exe
+E74. scan.exe (CredoMap_v2)
+E75. SmartAssembly
+E76. baseupd.exe
+E77. Pocomail
+E78. Yandex Browser
+E79. SmartFTP
+E80. Orbitum Browser
+E81. Kometa Browser
+E82. Opera Mail
+E83. Liebao Browser
+E84. 360Chrome Browser
+E85. Uran Browser
+E86. Brave Browser
+E87. CentBrowser
+E88. Comodo Dragon Browser
+E89. HarvesterX
+E90. Petya
+E91. 7Star Browser
+E92. TRYxaEbX.ps1
+E93. Elements Browser
+E94. ChromePlus Browser
+E95. Iridium Browser
+E96. Amigo Browser
+E97. Cobalt Strike Beacon
+E98. Chromium Browser
+E99. Microsoft Word
+E100. Microsoft Outlook
+E101. Windows Server 2008
+E102. MS Office [aka Microsoft Office]
+E103. z.ps1
+E104. MS PowerPoint
+E105. shellcode.x64.bin
+E106. Opera Browser
+E107. .NET Framework
+E108. vaultcli.dll
+E109. TRYxaEbX [aka oYUuQbXu]
+E110. scandoc.exe
+E111. Microsoft Office Services and Web Apps
+E112. MS Excel
+E113. Office 2010
+E114. MS Word
+E115. Office 2013
+E116. Office 2016
+E117. Office 2007
+E118. УКАЗ ПРЕЗИДЕНТА УКРАЇНИ №151_2022.mp4.lnk
+E119. До оплати рах.ф. 74 - 2018р.js
+E120. CVE-2018-8124
+E121. Рахунки за выполненные работы от 11.12.2018.js
+E122. PGMB New Order 18-2077.xlsx
+Mentions:
+M1. "Remote Utilities" (Software) — options: E1, E2, E3, E4
+M2. "install.msi" (Software) — options: E4, E10, E11, E12
+M3. "CCleaner.zip" (Software) — options: E18, E19, E20, E21
+M4. "CCleaner.exe" (Software) — options: E18, E26, E27, E21
+M5. "CCleaner.rar" (Software) — options: E26, E19, E22, E29
+M6. "Електронний план евакуації.rar" (Software) — options: E33, E29, E34, E18
+M7. "Електронний план евакуації.exe" (Software) — options: E30, E34, E11, E19
+M8. "plan_dsns.gov.ua.rar" (Software) — options: E30, E18, E33, E22
+M9. "installer.exe" (Software) — options: E12, E1, E19, E14
+M10. "FileZilla" (Software) — options: E4, E44, E45, E24
+M11. "jDownloader" (Software) — options: E4, E8, E21, E32
+M12. "vaultcli.dll" (Software) — options: E9, E4, E12, E7
+M13. "WinSCP" (Software) — options: E24, E56, E57, E32
+M14. "loader.exe" (Software) — options: E14, E19, E62, E43
+M15. "wscript.exe" (Software) — options: E4, E64, E65, E66
+M16. "Mozilla Firefox" (Software) — options: E51, E68, E20, E69
+M17. "spi.exe" (Software) — options: E4, E38, E19, E27
+M18. "wsuscr.exe" (Software) — options: E72, E63, E73, E19
+M19. "scandoc.exe" (Software) — options: E4, E27, E74, E19
+M20. "b.exe" (Software) — options: E14, E27, E19, E4
+M21. "FTP Commander" (Software) — options: E4, E60, E32, E20
+M22. "MCMDiction.exe" (Software) — options: E4, E19, E27, E65
+M23. "rundll32.exe" (Software) — options: E63, E19, E7, E28
+M24. "Opera Browser" (Software) — options: E80, E81, E82, E51
+M25. "WS_FTP" (Software) — options: E4, E24, E79, E32
+M26. "SmartFTP" (Software) — options: E4, E75, E20, E60
+M27. "Adobe Flash Player" (Software) — options: E45, E8, E29, E51
+M28. "FTPGetter" (Software) — options: E24, E5, E4, E89
+M29. "mshta.exe" (Software) — options: E14, E43, E38, E19
+M30. "baseupd.exe" (Software) — options: E14, E27, E19, E4
+M31. "Meterpreter" (Software) — options: E4, E32, E81, E89
+M32. "ckZ89.ExE" (Software) — options: E19, E27, E38, E14
+M33. "Chromium Browser" (Software) — options: E70, E94, E95, E84
+M34. "ConfuserEx" (Software) — options: E4, E19, E78, E51
+M35. "Microsoft Windows" (Software) — options: E4, E99, E58, E69
+M36. "PowerShell (powershell.exe)" (Software) — options: E64, E103, E19, E104
+M37. "OpenVPN" (Software) — options: E4, E82, E106, E90
+M38. "SQLite.Interop.dll" (Software) — options: E108, E4, E19, E65
+M39. "write.exe" (Software) — options: E109, E73, E38, E19
+M40. "Електронний запит.exe" (Software) — options: E33, E11, E30, E19
+M41. "major.exe" (Software) — options: E14, E21, E19, E4
+M42. "UkrScanner.exe (SFX)" (Software) — options: E22, E19, E110, E28
+M43. "MS Office" (Software) — options: E111, E112, E113, E114
+M44. "sgegkseg23mjl.exe" (Software) — options: E14, E19, E64, E43
+M45. "HarvesterX" (Software) — options: E4, E32, E5, E75
+M46. "Гуманітарна катастрофа України з 24 лютого 2022 року.xls" (Software) — options: E118, E36, E119, E29
+
+=== RESPONSE (5.2s, in 4155 / out 1305 tok, stop) ===
+{"v":[{"m":"Remote Utilities","id":"NEW","g":"remote administration software","p":null,"r":null},{"m":"install.msi","id":"NEW","g":"installation package file","p":"E1","r":"v"},{"m":"CCleaner.zip","id":"NEW","g":"compressed archive of CCleaner","p":"E19","r":"v"},{"m":"CCleaner.exe","id":"NEW","g":"executable for CCleaner","p":"E19","r":"v"},{"m":"CCleaner.rar","id":"NEW","g":"compressed archive of CCleaner","p":"E19","r":"v"},{"m":"Електронний план евакуації.rar","id":"NEW","g":"compressed archive of evacuation plan","p":"E33","r":"v"},{"m":"Електронний план евакуації.exe","id":"NEW","g":"executable of evacuation plan","p":"E33","r":"v"},{"m":"plan_dsns.gov.ua.rar","id":"NEW","g":"compressed archive of government plan","p":null,"r":null},{"m":"installer.exe","id":"NEW","g":"executable installer file","p":"E10","r":"v"},{"m":"FileZilla","id":"NEW","g":"file transfer software","p":null,"r":null},{"m":"jDownloader","id":"NEW","g":"download manager","p":null,"r":null},{"m":"vaultcli.dll","id":"NEW","g":"client library for vault","p":null,"r":null},{"m":"WinSCP","id":"NEW","g":"SFTP and FTP client","p":null,"r":null},{"m":"loader.exe","id":"NEW","g":"executable loader file","p":"E21","r":"v"},{"m":"wscript.exe","id":"NEW","g":"Windows Script Host executable","p":"E73","r":"v"},{"m":"Mozilla Firefox","id":"NEW","g":"web browser","p":null,"r":null},{"m":"spi.exe","id":"NEW","g":"executable file spi.exe","p":"E14","r":"v"},{"m":"wsuscr.exe","id":"NEW","g":"executable file wsuscr.exe","p":"E67","r":"v"},{"m":"scandoc.exe","id":"NEW","g":"executable for scanning documents","p":"E110","r":"v"},{"m":"b.exe","id":"NEW","g":"executable file b.exe","p":"E38","r":"v"},{"m":"FTP Commander","id":"NEW","g":"FTP client software","p":null,"r":null},{"m":"MCMDiction.exe","id":"NEW","g":"executable file MCMDiction.exe","p":"E28","r":"v"},{"m":"rundll32.exe","id":"NEW","g":"Windows library loader executable","p":"E55","r":"v"},{"m":"Opera Browser","id":"NEW","g":"web browser","p":null,"r":null},{"m":"WS_FTP","id":"NEW","g":"FTP client software","p":null,"r":null},{"m":"SmartFTP","id":"NEW","g":"FTP client software","p":null,"r":null},{"m":"Adobe Flash Player","id":"NEW","g":"multimedia platform","p":null,"r":null},{"m":"FTPGetter","id":"NEW","g":"file download tool","p":null,"r":null},{"m":"mshta.exe","id":"NEW","g":"Microsoft HTML Application host","p":"E71","r":"v"},{"m":"baseupd.exe","id":"NEW","g":"executable file baseupd.exe","p":"E76","r":"v"},{"m":"Meterpreter","id":"NEW","g":"Metasploit payload","p":"E5","r":"v"},{"m":"ckZ89.ExE","id":"NEW","g":"executable file ckZ89.ExE","p":"E54","r":"v"},{"m":"Chromium Browser","id":"NEW","g":"open-source web browser","p":null,"r":null},{"m":"ConfuserEx","id":"NEW","g":".NET obfuscator","p":null,"r":null},{"m":"Microsoft Windows","id":"NEW","g":"operating system","p":null,"r":null},{"m":"PowerShell (powershell.exe)","id":"NEW","g":"task automation framework","p":"E39","r":"v"},{"m":"OpenVPN","id":"NEW","g":"VPN software","p":null,"r":null},{"m":"SQLite.Interop.dll","id":"NEW","g":"SQLite interop library","p":"E9","r":"v"},{"m":"write.exe","id":"NEW","g":"executable file write.exe","p":"E65","r":"v"},{"m":"Електронний запит.exe","id":"NEW","g":"executable for electronic request","p":"E34","r":"v"},{"m":"major.exe","id":"NEW","g":"executable file major.exe","p":"E43","r":"v"},{"m":"UkrScanner.exe (SFX)","id":"NEW","g":"self-extracting executable of UkrScanner","p":"E23","r":"v"},{"m":"MS Office","id":"NEW","g":"productivity suite","p":"E102","r":"v"},{"m":"sgegkseg23mjl.exe","id":"NEW","g":"executable file sgegkseg23mjl.exe","p":null,"r":null},{"m":"HarvesterX","id":"NEW","g":"information gathering tool","p":null,"r":null},{"m":"Гуманітарна катастрофа України з 24 лютого 2022 року.xls","id":"NEW","g":"Excel spreadsheet regarding humanitarian disaster","p":"E40","r":"v"}]}
